@@ -67,7 +67,7 @@ export function initControls(isMobile, onTap) {
   if (isMobile && window.DeviceOrientationEvent) {
     if (typeof DeviceOrientationEvent.requestPermission === 'function') {
       const gb = document.createElement('button');
-      gb.textContent = '🔄 Включить гироскоп';
+      gb.textContent = window.I18N ? I18N.t('gyro_enable') : '🔄 Включить гироскоп';
       gb.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:300;padding:16px 28px;border-radius:30px;background:#1a1a1a;color:#fff;border:none;font-size:14px;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 8px 30px rgba(0,0,0,0.15);';
       document.body.appendChild(gb);
       gb.addEventListener('click', async () => {

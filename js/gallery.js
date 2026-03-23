@@ -21,8 +21,10 @@ let _isMobile = false;
 let selectedArt = null;
 
 function updateCounter() {
-  document.getElementById('counter').textContent = ARTWORKS.filter(a => !a.owner).length + ' работ доступно';
+  const n = ARTWORKS.filter(a => !a.owner).length;
+  document.getElementById('counter').textContent = window.I18N ? I18N.tf('works_available', n) : n + ' работ доступно';
 }
+window.addEventListener('langchange', updateCounter);
 
 export function createArtTexture(art, w, h) {
   const canvas = document.createElement('canvas');
@@ -133,11 +135,11 @@ export function openDetail(art) {
 
   const btn = document.getElementById('d-btn'), badge = document.getElementById('detail-owner-badge');
   if (art.owner) {
-    btn.textContent = 'В КОЛЛЕКЦИИ'; btn.className = 'owned'; btn.disabled = true;
+    btn.textContent = I18N.t('btn_owned'); btn.className = 'owned'; btn.disabled = true;
     badge.style.display = 'flex'; badge.querySelector('.dot').style.background = art.accent;
-    document.getElementById('d-owner-name').textContent = 'Владелец: ' + art.owner;
+    document.getElementById('d-owner-name').textContent = I18N.t('owner_prefix') + art.owner;
   } else {
-    btn.textContent = 'ПРИОБРЕСТИ'; btn.className = ''; btn.disabled = false;
+    btn.textContent = I18N.t('btn_acquire'); btn.className = ''; btn.disabled = false;
     badge.style.display = 'none';
   }
 
@@ -169,13 +171,13 @@ export function closeDetail() {
 export function handleBuy() {
   if (!selectedArt || selectedArt.owner) return;
   const btn = document.getElementById('d-btn');
-  btn.textContent = 'ОФОРМЛЕНИЕ...'; btn.disabled = true;
+  btn.textContent = I18N.t('btn_processing'); btn.disabled = true;
   setTimeout(() => {
-    selectedArt.owner = 'Вы';
-    btn.textContent = '✓ ТЕПЕРЬ ЭТО ВАШЕ'; btn.className = 'bought';
+    selectedArt.owner = I18N.t('owner_you');
+    btn.textContent = I18N.t('btn_bought'); btn.className = 'bought';
     const badge = document.getElementById('detail-owner-badge');
     badge.style.display = 'flex'; badge.querySelector('.dot').style.background = selectedArt.accent;
-    document.getElementById('d-owner-name').textContent = 'Владелец: Вы';
+    document.getElementById('d-owner-name').textContent = I18N.t('owner_prefix') + I18N.t('owner_you');
     _paintings.forEach(p => {
       if (p.art.id === selectedArt.id) {
         const ts = _isMobile ? 384 : 512;

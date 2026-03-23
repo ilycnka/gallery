@@ -16,6 +16,14 @@
     }
     canvas { display: block; }
 
+    #lang-hint {
+      position: fixed; top: 46px; right: 22px; z-index: 199;
+      font-size: 11px; color: rgba(0,0,0,0.28); letter-spacing: 0.10em;
+      white-space: nowrap; pointer-events: none; text-align: right;
+      opacity: 0; transition: opacity 0.6s ease;
+    }
+    #lang-hint.show { opacity: 1; }
+
     #logo {
       position: fixed;
       top: 13%;
@@ -34,10 +42,26 @@
 <body>
 
 <div id="logo">VoidWall</div>
+<div id="lang-hint">↑ русский язык</div>
 
+<script src="js/i18n.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
+I18N.addToggle('light');
+
+// Подсказка «доступен на русском» — каждый раз при новой сессии
+(function () {
+  const el = document.getElementById('lang-hint');
+  let timer;
+  const dismiss = () => { clearTimeout(timer); el.classList.remove('show'); };
+  setTimeout(() => {
+    if (I18N.lang === 'ru') return; // уже переключили — не нужна
+    el.classList.add('show');
+    timer = setTimeout(dismiss, 6000);
+  }, 1600);
+  window.addEventListener('langchange', dismiss, { once: true });
+})();
 
 // ─── Сцена ───
 const scene = new THREE.Scene();
@@ -104,12 +128,12 @@ function createNavTexture(text, opacity) {
 
 // offset: позиция относительно камеры
 const NAV = [
-  { text: 'select collection', href: 'collections.html', offset: [0, -0.4, -6.5], ry: 0, floatPhase: 0, floatAmp: 0.07, opacity: 0.42 },
+  { i18nKey: 'nav_collections', href: 'collections.html', offset: [0, -0.4, -6.5], ry: 0, floatPhase: 0, floatAmp: 0.07, opacity: 0.42 },
 ];
 
 const navMeshes = [];
 NAV.forEach(item => {
-  const tex = createNavTexture(item.text, item.opacity);
+  const tex = createNavTexture(I18N.t(item.i18nKey), item.opacity);
   const ph = isMobile ? 0.72 : 0.82;
   const pw = (600 / 88) * ph;
   const mesh = new THREE.Mesh(
@@ -118,6 +142,15 @@ NAV.forEach(item => {
   );
   scene.add(mesh);
   navMeshes.push({ mesh, item });
+});
+
+// Перестраиваем текстуры надписей при смене языка
+window.addEventListener('langchange', () => {
+  navMeshes.forEach(({ mesh, item }) => {
+    mesh.material.map.dispose();
+    mesh.material.map = createNavTexture(I18N.t(item.i18nKey), item.opacity);
+    mesh.material.needsUpdate = true;
+  });
 });
 
 // ─── Мышь / гироскоп ───
@@ -135,7 +168,7 @@ if (isMobile && window.DeviceOrientationEvent) {
   };
   if (typeof DeviceOrientationEvent.requestPermission === 'function') {
     const btn = document.createElement('button');
-    btn.textContent = '🔄 Разрешить гироскоп';
+    btn.textContent = I18N.t('gyro_allow');
     btn.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:300;padding:16px 28px;border-radius:30px;background:#1a1a1a;color:#fff;border:none;font-size:14px;font-family:inherit;cursor:pointer;';
     document.body.appendChild(btn);
     btn.addEventListener('click', async () => {

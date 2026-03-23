@@ -5,9 +5,11 @@ import { initControls } from './controls.js';
 
 const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
 
-if (isMobile) {
-  document.getElementById('hint').textContent = 'касайтесь работ · наклоняйте телефон · слайдер — скорость';
-}
+const hintEl = document.getElementById('hint');
+hintEl.textContent = I18N.t(isMobile ? 'hint_mobile' : 'hint_desktop');
+window.addEventListener('langchange', () => {
+  hintEl.textContent = I18N.t(isMobile ? 'hint_mobile' : 'hint_desktop');
+});
 
 const { scene, camera, renderer, pointLight } = initScene(isMobile);
 const { paintings, particles, SPREAD_Z } = initGallery(scene, isMobile);

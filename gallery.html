@@ -9,14 +9,14 @@
 <body>
 
 <div id="overlay">
-  <div class="logo">Галерея <span>3D пространство</span></div>
+  <div class="logo" id="gallery-title">Галерея <span id="gallery-sub">3D пространство</span></div>
   <div class="counter" id="counter"></div>
 </div>
 
-<div id="hint">скролл — скорость · нажмите на работу · двигайте мышь</div>
+<div id="hint"></div>
 
 <div id="speed-control">
-  <label>Скорость</label>
+  <label id="speed-label">Скорость</label>
   <input type="range" id="speedSlider" min="0" max="100" value="35" />
 </div>
 
@@ -28,16 +28,31 @@
       <div class="meta" id="d-meta"></div>
       <h2 id="d-title"></h2>
       <div class="line" id="d-line"></div>
-      <p class="desc">Оригинальная работа. При покупке вы становитесь единственным владельцем — ваше имя отображается на произведении в галерее.</p>
+      <p class="desc" id="art-desc">Оригинальная работа. При покупке вы становитесь единственным владельцем — ваше имя отображается на произведении в галерее.</p>
       <div class="price" id="d-price"></div>
       <button id="d-btn">ПРИОБРЕСТИ</button>
       <div id="detail-owner-badge"><span class="dot"></span><span id="d-owner-name"></span></div>
       <div class="back" id="d-back">← назад в галерею</div>
+
     </div>
   </div>
 </div>
 
+<script src="js/i18n.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Применяем переводы к статичным элементам галереи
+function applyGalleryLang() {
+  document.getElementById('gallery-title').firstChild.textContent = I18N.t('gallery_title') + ' ';
+  document.getElementById('gallery-sub').textContent = I18N.t('gallery_sub');
+  document.getElementById('speed-label').textContent = I18N.t('speed_label');
+  document.getElementById('art-desc').textContent = I18N.t('art_desc');
+  document.getElementById('d-back').textContent = I18N.t('back_gallery');
+}
+applyGalleryLang();
+window.addEventListener('langchange', applyGalleryLang);
+I18N.addToggle('dark');
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
