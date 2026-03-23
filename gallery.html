@@ -2,15 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Gallery — VoidWall</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #eceae5;
-      min-height: 100vh;
-      font-family: 'Segoe UI', sans-serif;
+      background: #ffffff;
+      height: 100vh;
       overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
     canvas#bg { position: fixed; inset: 0; z-index: 0; display: block; }
     #back {
@@ -19,19 +22,58 @@
       text-decoration: none; transition: color 0.2s;
     }
     #back:hover { color: rgba(0,0,0,0.65); }
-    .page { position: fixed; inset: 0; z-index: 1; }
-    .artwork { position: absolute; cursor: pointer; }
-    .artwork .img { display: block; }
-    .artwork .title {
-      margin-top: 7px; font-size: 10px;
-      letter-spacing: 0.12em; color: rgba(0,0,0,0.32);
-      text-transform: uppercase;
+
+    /* ── Попап ── */
+    #popup {
+      position: fixed; inset: 0; z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.55);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.35s ease;
     }
-    .artwork:nth-child(1) { top: 12%; left: 8%;  }
-    .artwork:nth-child(2) { top: 8%;  left: 42%; }
-    .artwork:nth-child(3) { top: 18%; left: 68%; }
-    .artwork:nth-child(4) { top: 52%; left: 22%; }
-    .artwork:nth-child(5) { top: 48%; left: 58%; }
+    #popup.open { opacity: 1; pointer-events: all; }
+
+    #popup-card {
+      position: relative;
+      width: min(480px, 90vw);
+      background: #fff;
+      border: 1px solid rgba(28,24,20,0.10);
+      padding: 36px 36px 30px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    #popup-img {
+      width: 100%; aspect-ratio: 3/4;
+      object-fit: cover;
+      display: block;
+      filter: grayscale(8%);
+    }
+    #popup-title {
+      font-size: 13px; font-weight: 300;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(28,24,20,0.85);
+    }
+    #popup-meta {
+      font-size: 10px; letter-spacing: 0.12em;
+      color: rgba(28,24,20,0.35); text-transform: uppercase;
+    }
+    #popup-sale {
+      font-size: 10px; font-weight: 300;
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgb(110,18,18);
+    }
+    #popup-close {
+      position: absolute; top: 14px; right: 18px;
+      background: none; border: none; cursor: pointer;
+      font-size: 18px; color: rgba(28,24,20,0.30);
+      line-height: 1; transition: color 0.2s;
+    }
+    #popup-close:hover { color: rgba(28,24,20,0.75); }
+    @media (max-width: 480px) {
+      #popup-card { padding: 24px 20px 20px; gap: 10px; }
+      #popup-title { font-size: 11px; }
+    }
   </style>
 </head>
 <body>
@@ -39,312 +81,471 @@
 <canvas id="bg"></canvas>
 <a id="back" href="collections.html">← back</a>
 
-<div class="page">
-  <div class="artwork">
-    <canvas class="img" width="220" height="300"></canvas>
-    <div class="title">Artwork 1</div>
-  </div>
-  <div class="artwork">
-    <canvas class="img" width="260" height="200"></canvas>
-    <div class="title">Artwork 2</div>
-  </div>
-  <div class="artwork">
-    <canvas class="img" width="180" height="240"></canvas>
-    <div class="title">Artwork 3</div>
-  </div>
-  <div class="artwork">
-    <canvas class="img" width="240" height="180"></canvas>
-    <div class="title">Artwork 4</div>
-  </div>
-  <div class="artwork">
-    <canvas class="img" width="200" height="260"></canvas>
-    <div class="title">Artwork 5</div>
+<div id="popup">
+  <div id="popup-card">
+    <button id="popup-close">×</button>
+    <img id="popup-img" src="" alt="" />
+    <div id="popup-title"></div>
+    <div id="popup-meta"></div>
+    <div id="popup-sale">on sale (donation)</div>
   </div>
 </div>
 
 <script src="js/i18n.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || innerWidth < 768;
 I18N.addToggle('light');
 document.getElementById('back').textContent = '← ' + I18N.t('back');
 window.addEventListener('langchange', () => {
   document.getElementById('back').textContent = '← ' + I18N.t('back');
 });
 
-// Заглушки — нейтральные тона
-document.querySelectorAll('.artwork .img').forEach((c, i) => {
-  const ctx = c.getContext('2d');
-  const shades = ['#e0dbd5', '#d5dbe0', '#dde0d5', '#e0d5d5', '#d5d8e0'];
-  ctx.fillStyle = shades[i];
-  ctx.fillRect(0, 0, c.width, c.height);
+// ─── Сцена ───────────────────────────────────────────────────────────
+const canvas   = document.getElementById('bg');
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 2, 14);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(isMobile ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0xffffff, 1);
+
+// ─── Объёмная решётка ────────────────────────────────────────────────
+const X1=-22, X2=22, DX=3;
+const Y1=-10, Y2=10, DY=2.5;
+const Z1=-35, Z2= 4, DZ=3;
+
+const xs=[], ys=[], zs=[];
+for (let x=X1; x<=X2; x+=DX) xs.push(x);
+for (let y=Y1; y<=Y2; y+=DY) ys.push(y);
+for (let z=Z1; z<=Z2; z+=DZ) zs.push(z);
+
+const pts = [];
+for (const y of ys) for (const z of zs) pts.push(X1,y,z, X2,y,z);
+for (const x of xs) for (const z of zs) pts.push(x,Y1,z, x,Y2,z);
+for (const x of xs) for (const y of ys) pts.push(x,y,Z1, x,y,Z2);
+
+const gridGeo = new THREE.BufferGeometry();
+gridGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+scene.add(new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({
+  color: 0x1c1814, transparent: true, opacity: 0.05,
+})));
+
+// ─── Заглушки на линиях сетки ────────────────────────────────────────
+// Позиции привязаны к узлам сетки (DX=3, DY=2.5, DZ=3)
+const WORKS = [
+  { pos: [-10,  0,    1],  ry: 0, w: 2.2, h: 3.2, src: 'assets/images/trees-and-glass.jpg', title: 'Trees and Glass',  meta: 'Pencil on paper · 2026' },
+  { pos: [  5,  2.5,  0],  ry: 0, w: 2.0, h: 2.8, src: 'assets/images/downtown.jpg',        title: 'Downtown',         meta: 'Pencil on paper · 2026' },
+  { pos: [ -4, -2.5, -2],  ry: 0, w: 2.4, h: 3.4, src: 'assets/images/rooftop-view.jpg',    title: 'Rooftop View',     meta: 'Pencil on paper · 2026' },
+  { pos: [ 11,  0,   -2],  ry: 0, w: 2.2, h: 3.0, src: 'assets/images/the-shop.jpg',        title: 'The Shop',         meta: 'Pencil on paper · 2026' },
+  { pos: [ -7,  2.5, -5],  ry: 0, w: 2.0, h: 2.6, src: 'assets/images/banyan-street.jpg',   title: 'Banyan Street',    meta: 'Pencil on paper · 2026' },
+  { pos: [  2, -2.5, -5],  ry: 0, w: 2.4, h: 3.2, src: 'assets/images/tower-riverside.jpg', title: 'Tower Riverside',  meta: 'Pencil on paper · 2026' },
+  { pos: [-13,  0,   -8],  ry: 0, w: 2.2, h: 3.0, src: 'assets/images/cafe-window.jpg',     title: 'Cafe Window',      meta: 'Pencil on paper · 2026' },
+  { pos: [  0,  2.5, -8],  ry: 0, w: 2.0, h: 2.8, src: 'assets/images/mahanakhon.jpg',      title: 'MahaNakhon',       meta: 'Pencil on paper · 2026' },
+  { pos: [  8, -2.5, -11], ry: 0, w: 2.2, h: 3.2, src: 'assets/images/temple.jpg',          title: 'Temple',           meta: 'Pencil on paper · 2026' },
+];
+
+const texLoader = new THREE.TextureLoader();
+const frameMat = new THREE.LineBasicMaterial({ color: 0x1c1814, transparent: true, opacity: 0.22 });
+
+const workMeshes = []; // для рейкастера
+
+WORKS.forEach((work, i) => {
+  const { pos, ry, w, h, src } = work;
+  const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  mesh.position.set(...pos);
+  mesh.rotation.y = ry;
+  mesh.userData.workIndex = i;
+  scene.add(mesh);
+  workMeshes.push(mesh);
+  texLoader.load(src, tex => { mat.map = tex; mat.needsUpdate = true; });
+
+  // Тонкая рамка
+  const p = 0.05;
+  const frameGeo = new THREE.BufferGeometry();
+  frameGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    -w/2 - p, -h/2 - p, 0,
+     w/2 + p, -h/2 - p, 0,
+     w/2 + p,  h/2 + p, 0,
+    -w/2 - p,  h/2 + p, 0,
+  ]), 3));
+  const frame = new THREE.LineLoop(frameGeo, frameMat);
+  frame.position.set(...pos);
+  frame.rotation.y = ry;
+  scene.add(frame);
 });
 
-// ─── Three.js ───
-const canvas = document.getElementById('bg');
-const scene   = new THREE.Scene();
-const camera  = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
-camera.position.set(0, 0, 18);
+// ─── Попап ───────────────────────────────────────────────────────────
+const popup     = document.getElementById('popup');
+const popupImg  = document.getElementById('popup-img');
+const popupTitle= document.getElementById('popup-title');
+const popupMeta = document.getElementById('popup-meta');
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setClearColor(0x000000, 0);
+function openPopup(work) {
+  popupImg.src     = work.src;
+  popupImg.alt     = work.title;
+  popupTitle.textContent = work.title;
+  popupMeta.textContent  = work.meta;
+  popup.classList.add('open');
+}
+function closePopup() { popup.classList.remove('open'); }
 
-// ─── Архитектура Бангкока в линиях ───
-function buildBangkok() {
-  const main   = []; // основные контуры зданий
-  const detail = []; // горизонтали, кольца, детали
-  const depth  = []; // земля, перспективные линии
+document.getElementById('popup-close').addEventListener('click', closePopup);
+popup.addEventListener('click', e => { if (e.target === popup) closePopup(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePopup(); });
 
-  function m(x1,y1,z1,x2,y2,z2) { main.push(x1,y1,z1,x2,y2,z2); }
-  function d(x1,y1,z1,x2,y2,z2) { detail.push(x1,y1,z1,x2,y2,z2); }
-  function g(x1,y1,z1,x2,y2,z2) { depth.push(x1,y1,z1,x2,y2,z2); }
-  const mh = (x1,x2,y,z) => m(x1,y,z, x2,y,z);
-  const mv = (x,y1,y2,z) => m(x,y1,z, x,y2,z);
-  const dh = (x1,x2,y,z) => d(x1,y,z, x2,y,z);
-  const dv = (x,y1,y2,z) => d(x,y1,z, x,y2,z);
-  const GND = -10;
+// Рейкастер для кликов по работам
+const raycaster = new THREE.Raycaster();
+const _mouse2d  = new THREE.Vector2();
 
-  // ─── MAHANAKHON ─────────────────────────────────────────────────────
-  // Прямоугольная башня с пиксельными вырезами по диагонали
-  ;(function () {
-    const ox = -2.5, oy = GND, oz = -3, W = 5, H = 18;
-    const FL = 36, fh = H / FL;
-
-    // Основной контур
-    mh(ox, ox+W, oy, oz);
-    mv(ox,    oy, oy+H, oz);
-    mv(ox+W,  oy, oy+H, oz);
-    mh(ox, ox+W, oy+H, oz);
-
-    // Горизонтали этажей
-    for (let i = 1; i < FL; i++) dh(ox, ox+W, oy+fh*i, oz);
-
-    // Пиксельный спиральный вырез (8 прямоугольных блоков по диагонали)
-    for (let i = 0; i < 8; i++) {
-      const t  = i / 7;
-      const bx = ox + W * (0.52 - t * 0.46);
-      const by = oy + H * (0.07 + t * 0.66);
-      const bw = W * 0.50;
-      const bh = fh * 2.8;
-      m(bx,    by,    oz, bx+bw, by,    oz);
-      m(bx+bw, by,    oz, bx+bw, by+bh, oz);
-      m(bx+bw, by+bh, oz, bx,    by+bh, oz);
-      m(bx,    by+bh, oz, bx,    by,    oz);
-    }
-
-    // Смотровая платформа (Crown) — немного уже
-    const cw = W * 0.86, ch = H * 0.044;
-    const cx = ox + (W - cw) / 2;
-    mh(cx, cx+cw, oy+H,    oz);
-    mh(cx, cx+cw, oy+H+ch, oz);
-    mv(cx,    oy+H, oy+H+ch, oz);
-    mv(cx+cw, oy+H, oy+H+ch, oz);
-
-    // Антенна
-    mv(ox+W/2, oy+H+ch, oy+H+ch+1.4, oz);
-  })();
-
-  // ─── WAT ARUN ────────────────────────────────────────────────────────
-  // Центральный пранг + 4 спутника
-  ;(function () {
-    const ox = 10, oy = GND, oz = -5;
-
-    function prang(cx, base, bw, H, rings) {
-      const tip = bw * 0.07, hw = bw / 2;
-      m(cx-hw, base,   oz, cx+hw, base, oz);
-      m(cx-hw, base,   oz, cx-tip/2, base+H, oz);
-      m(cx+hw, base,   oz, cx+tip/2, base+H, oz);
-      mh(cx-tip/2, cx+tip/2, base+H, oz);
-      mv(cx, base+H, base+H+bw*0.4, oz); // шпиль
-      for (let i = 0; i < rings; i++) {
-        const t  = (i + 1) / (rings + 1);
-        const y  = base + H * t;
-        const rw = hw * (1 - t * 0.88) + tip / 2;
-        dh(cx-rw, cx+rw, y, oz);
-      }
-    }
-
-    // Платформы
-    mh(ox-4.8, ox+4.8, oy,      oz);
-    mv(ox-4.8, oy, oy+0.55, oz); mv(ox+4.8, oy, oy+0.55, oz);
-    mh(ox-4.8, ox+4.8, oy+0.55, oz);
-    mh(ox-3.2, ox+3.2, oy+0.55, oz);
-    mv(ox-3.2, oy+0.55, oy+1.1, oz); mv(ox+3.2, oy+0.55, oy+1.1, oz);
-    mh(ox-3.2, ox+3.2, oy+1.1,  oz);
-
-    // Главный пранг
-    prang(ox, oy+1.1, 4.2, 15, 20);
-    // Спутники
-    prang(ox-3.6, oy+0.55, 1.5, 5.5, 7);
-    prang(ox+3.6, oy+0.55, 1.5, 5.5, 7);
-    prang(ox-2.1, oy+0.55, 1.1, 4.0, 5);
-    prang(ox+2.1, oy+0.55, 1.1, 4.0, 5);
-  })();
-
-  // ─── ВАТ / ХРАМ С МНОГОЯРУСНОЙ КРЫШЕЙ ───────────────────────────────
-  ;(function () {
-    const ox = -17, oy = GND, oz = -7;
-
-    // Зал — прямоугольник с колоннами
-    mh(ox, ox+9, oy, oz);
-    mv(ox,   oy, oy+2.2, oz);
-    mv(ox+9, oy, oy+2.2, oz);
-    for (let i = 1; i <= 5; i++) dv(ox+i*9/6, oy, oy+2.0, oz);
-
-    function thaiRoof(rx, ry, rw, rh, sw) {
-      const cx = rx + rw / 2;
-      m(rx-sw*0.5, ry, oz, cx, ry+rh, oz);      // левый скат
-      m(rx+rw+sw*0.5, ry, oz, cx, ry+rh, oz);   // правый скат
-      mh(rx-sw, rx+rw+sw, ry, oz);               // карниз
-      // Загнутые концы (чофа)
-      m(rx-sw, ry, oz, rx-sw*0.25, ry-sw*0.65, oz);
-      m(rx+rw+sw, ry, oz, rx+rw+sw*0.25, ry-sw*0.65, oz);
-    }
-
-    thaiRoof(ox-0.6, oy+2.2, 10.2, 2.8, 0.75);
-    thaiRoof(ox+1.0, oy+4.5, 7.0,  2.3, 0.60);
-    thaiRoof(ox+2.4, oy+6.3, 4.2,  2.0, 0.45);
-    thaiRoof(ox+3.5, oy+7.8, 2.0,  1.6, 0.30);
-
-    // Шпиль
-    const sx = ox + 4.5;
-    mv(sx, oy+9.4, oy+11.5, oz);
-    m(sx-0.2, oy+10.6, oz, sx, oy+11.7, oz);
-    m(sx+0.2, oy+10.6, oz, sx, oy+11.7, oz);
-
-    // Нага-финиалы на концах карниза
-    m(ox-0.6, oy+2.2, oz, ox-1.2, oy+1.3, oz);
-    m(ox+9.6, oy+2.2, oz, ox+10.2, oy+1.3, oz);
-  })();
-
-  // ─── ЧЕДИ / СТУПА ───────────────────────────────────────────────────
-  ;(function () {
-    const cx = 22, oy = GND, oz = -12;
-
-    // Платформы
-    mh(cx-3, cx+3, oy, oz);
-    mv(cx-3, oy, oy+0.5, oz); mv(cx+3, oy, oy+0.5, oz);
-    mh(cx-3, cx+3, oy+0.5, oz);
-    mh(cx-2, cx+2, oy+0.5, oz);
-    mv(cx-2, oy+0.5, oy+1.0, oz); mv(cx+2, oy+0.5, oy+1.0, oz);
-    mh(cx-2, cx+2, oy+1.0, oz);
-
-    // Профиль колокола — точки [halfWidth, y]
-    const prof = [
-      [1.8, oy+1.0], [1.95,oy+2.0], [1.7, oy+3.5],
-      [1.2, oy+5.2], [0.7, oy+6.6], [0.5, oy+7.5],
-      [0.35,oy+8.4], [0.2, oy+9.8], [0.06,oy+12.0],
-    ];
-    for (let i = 0; i < prof.length - 1; i++) {
-      m(cx-prof[i][0], prof[i][1], oz, cx-prof[i+1][0], prof[i+1][1], oz);
-      m(cx+prof[i][0], prof[i][1], oz, cx+prof[i+1][0], prof[i+1][1], oz);
-      dh(cx-prof[i][0], cx+prof[i][0], prof[i][1], oz);
-    }
-    mv(cx, oy+12.0, oy+14.2, oz); // шпиль
-  })();
-
-  // ─── ВТОРОЙ ПРАНГ / МАЛЕНЬКИЙ ХРАМ (фон левый) ─────────────────────
-  ;(function () {
-    const cx = -26, oy = GND, oz = -10;
-    const H = 10, bw = 2.8, tip = bw * 0.06, hw = bw / 2;
-
-    mh(cx-3.5, cx+3.5, oy, oz);
-    mv(cx-3.5, oy, oy+0.6, oz); mv(cx+3.5, oy, oy+0.6, oz);
-    mh(cx-3.5, cx+3.5, oy+0.6, oz);
-
-    m(cx-hw, oy+0.6, oz, cx+hw, oy+0.6, oz);
-    m(cx-hw, oy+0.6, oz, cx-tip/2, oy+0.6+H, oz);
-    m(cx+hw, oy+0.6, oz, cx+tip/2, oy+0.6+H, oz);
-    mh(cx-tip/2, cx+tip/2, oy+0.6+H, oz);
-    mv(cx, oy+0.6+H, oy+0.6+H+bw*0.35, oz);
-    for (let i = 0; i < 12; i++) {
-      const t  = (i+1)/13, y = oy+0.6 + H*t;
-      const rw = hw*(1-t*0.87)+tip/2;
-      dh(cx-rw, cx+rw, y, oz);
-    }
-
-    // Два маленьких спутника
-    [-2.0, 2.0].forEach(dx => {
-      const sh = 4, sbw = 1.0, stip = sbw*0.08, shw = sbw/2;
-      m(cx+dx-shw, oy+0.6, oz, cx+dx+shw, oy+0.6, oz);
-      m(cx+dx-shw, oy+0.6, oz, cx+dx-stip/2, oy+0.6+sh, oz);
-      m(cx+dx+shw, oy+0.6, oz, cx+dx+stip/2, oy+0.6+sh, oz);
-      mh(cx+dx-stip/2, cx+dx+stip/2, oy+0.6+sh, oz);
-      mv(cx+dx, oy+0.6+sh, oy+0.6+sh+shw*0.4, oz);
-      for (let i = 0; i < 6; i++) {
-        const t = (i+1)/7, y = oy+0.6+sh*t;
-        const rw = shw*(1-t*0.87)+stip/2;
-        dh(cx+dx-rw, cx+dx+rw, y, oz);
-      }
-    });
-  })();
-
-  // ─── ГОРОДСКИЕ БЛОКИ — ФОНОВЫЙ ГОРИЗОНТ ─────────────────────────────
-  ;(function () {
-    const blocks = [
-      {x:-35, w:5.5, h:7,  fl:8,  z:-16},
-      {x:-29, w:2.8, h:11, fl:13, z:-14},
-      {x:-22, w:3.5, h:6,  fl:7,  z:-17},
-      {x:-13, w:3.0, h:7,  fl:8,  z:-15},
-      {x:  4, w:3.5, h:5,  fl:6,  z:-16},
-      {x: 16, w:4.0, h:8,  fl:9,  z:-15},
-      {x: 22, w:5.0, h:6,  fl:7,  z:-17},
-      {x: 28, w:3.5, h:9,  fl:10, z:-14},
-    ];
-    blocks.forEach(b => {
-      const gy = GND;
-      mh(b.x, b.x+b.w, gy,      b.z);
-      mv(b.x,          gy, gy+b.h, b.z);
-      mv(b.x+b.w,      gy, gy+b.h, b.z);
-      mh(b.x, b.x+b.w, gy+b.h,  b.z);
-      for (let i = 1; i < b.fl; i++) dh(b.x, b.x+b.w, gy+b.h*i/b.fl, b.z);
-    });
-  })();
-
-  // ─── ЗЕМЛЯ И ПЕРСПЕКТИВНЫЕ ЛИНИИ ─────────────────────────────────────
-  ;(function () {
-    // Горизонтальные линии почвы
-    for (let z = -4; z >= -35; z -= 3.5) g(-50, 50, GND, z);
-    // Линии схода в перспективе
-    for (let i = -6; i <= 6; i++) {
-      const x = i * 7;
-      g(x, GND, 2, x * 2.4, GND, -38);
-    }
-    // Несколько вертикальных колонн воздуха
-    for (let i = -4; i <= 4; i++) {
-      const x = i * 10;
-      g(x, GND, -5, x, GND + 20, -5);
-    }
-  })();
-
-  // Создание объектов Three.js
-  function makeSet(pts, opacity) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
-    return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
-      color: 0x1c1510, transparent: true, opacity,
-    }));
-  }
-
-  return [
-    makeSet(main,   0.20),
-    makeSet(detail, 0.09),
-    makeSet(depth,  0.06),
-  ];
+function onCanvasClick(cx, cy) {
+  if (popup.classList.contains('open')) return;
+  _mouse2d.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(_mouse2d, camera);
+  const hit = raycaster.intersectObjects(workMeshes)[0];
+  if (hit) openPopup(WORKS[hit.object.userData.workIndex]);
 }
 
-const archGroup = new THREE.Group();
-buildBangkok().forEach(ls => archGroup.add(ls));
-scene.add(archGroup);
+window.addEventListener('click', e => onCanvasClick(e.clientX, e.clientY));
 
-// Движение камеры за мышью
+
+// Тач
+let _touchStart = null;
+window.addEventListener('touchstart', e => {
+  _touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+window.addEventListener('touchend', e => {
+  if (!_touchStart) return;
+  const dx = e.changedTouches[0].clientX - _touchStart.x;
+  const dy = e.changedTouches[0].clientY - _touchStart.y;
+  if (Math.abs(dx) < 10 && Math.abs(dy) < 10)
+    onCanvasClick(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  _touchStart = null;
+}, { passive: true });
+
+
+// ─── Объёмный город ──────────────────────────────────────────────────
+(function () {
+  const GND = -10;
+  let s = 31337;
+  const rng = () => { s = Math.imul(s, 1664525) + 1013904223 | 0; return (s >>> 0) / 0xffffffff; };
+
+  // Буферы с вершинными цветами
+  const fPos = [], fCol = [];
+  const lPos = [], lCol = [];
+  const rPos = [], rCol = [];
+
+  function pushFace(pts, shade) {
+    for (let i = 0; i < pts.length; i += 3) {
+      fPos.push(pts[i], pts[i+1], pts[i+2]);
+      fCol.push(shade, shade, shade);
+    }
+  }
+  function pushLines(pts, shade) {
+    for (let i = 0; i < pts.length; i += 3) {
+      lPos.push(pts[i], pts[i+1], pts[i+2]);
+      lCol.push(shade, shade, shade);
+    }
+  }
+  function pushRoad(x1, x2, z1, z2, shade) {
+    const y = GND + 0.02;
+    const pts = [x1,y,z2, x2,y,z2, x2,y,z1,  x1,y,z2, x2,y,z1, x1,y,z1];
+    for (let i = 0; i < pts.length; i += 3) {
+      rPos.push(pts[i], pts[i+1], pts[i+2]);
+      rCol.push(shade, shade, shade);
+    }
+  }
+
+  function addBox(x1, x2, y1, y2, z1, z2, faceShade, lineShade) {
+    // Грани
+    pushFace([
+      x1,y1,z2, x2,y1,z2, x2,y2,z2,  x1,y1,z2, x2,y2,z2, x1,y2,z2, // front
+      x2,y1,z1, x1,y1,z1, x1,y2,z1,  x2,y1,z1, x1,y2,z1, x2,y2,z1, // back
+      x1,y1,z1, x1,y1,z2, x1,y2,z2,  x1,y1,z1, x1,y2,z2, x1,y2,z1, // left
+      x2,y1,z2, x2,y1,z1, x2,y2,z1,  x2,y1,z2, x2,y2,z1, x2,y2,z2, // right
+      x1,y2,z2, x2,y2,z2, x2,y2,z1,  x1,y2,z2, x2,y2,z1, x1,y2,z1, // top
+    ], faceShade);
+    // Рёбра
+    pushLines([
+      x1,y1,z2,x2,y1,z2, x2,y1,z2,x2,y2,z2, x2,y2,z2,x1,y2,z2, x1,y2,z2,x1,y1,z2,
+      x1,y1,z1,x2,y1,z1, x2,y1,z1,x2,y2,z1, x2,y2,z1,x1,y2,z1, x1,y2,z1,x1,y1,z1,
+      x1,y1,z2,x1,y1,z1, x2,y1,z2,x2,y1,z1, x1,y2,z2,x1,y2,z1, x2,y2,z2,x2,y2,z1,
+    ], lineShade);
+    // Горизонтали этажей
+    const fl = Math.floor((y2-y1)/0.85);
+    for (let f=1; f<fl; f++) {
+      const fy = y1+(y2-y1)*f/fl;
+      pushLines([x1,fy,z2, x2,fy,z2], lineShade * 0.6);
+    }
+  }
+
+  // Ряды кварталов (zFront — ближняя стена, zBack — дальняя)
+  const blockRows = isMobile ? [
+    { zFront: -0.5, zBack: -3.2 },
+    { zFront: -5.0, zBack: -8.0 },
+  ] : [
+    { zFront: -0.5, zBack: -3.2 },
+    { zFront: -5.0, zBack: -8.0 },
+    { zFront:-10.5, zBack:-13.5 },
+    { zFront:-16.0, zBack:-19.0 },
+  ];
+
+  // Продольные улицы (между рядами)
+  pushRoad(-24, 24, blockRows[1].zFront, blockRows[0].zBack, 0.055);
+  pushRoad(-24, 24, blockRows[2].zFront, blockRows[1].zBack, 0.045);
+  pushRoad(-24, 24, blockRows[3].zFront, blockRows[2].zBack, 0.035);
+
+  for (const row of blockRows) {
+    const zF = row.zFront, zB = row.zBack, depth = zF - zB;
+    let x = -24;
+    while (x < 24) {
+      // Поперечная улица перед кварталом
+      const sw = 0.7 + rng() * 0.8;
+      const roadShade = 0.04 + rng() * 0.04;
+      pushRoad(x, x + sw, zB - 0.2, zF + 0.2, roadShade);
+      x += sw;
+
+      // Квартал — несколько зданий вплотную
+      const blockW = 3.0 + rng() * 4.5;
+      let bx = x;
+      const blockEnd = Math.min(x + blockW, 24);
+
+      while (bx + 0.6 < blockEnd) {
+        const w  = 0.6 + rng() * 1.8;
+        const h  = 1.2 + rng() * 6.2;
+        const d  = depth * (0.7 + rng() * 0.3);
+        const bz1 = zF - d, bz2 = zF;
+
+        // Уникальный оттенок у каждого здания
+        const fShade = 0.06 + rng() * 0.20;
+        const lShade = fShade + 0.08 + rng() * 0.10;
+
+        if (bx + w <= blockEnd)
+          addBox(bx, bx+w, GND, GND+h, bz1, bz2, fShade, lShade);
+
+        // Переулок между зданиями
+        const gap = 0.08 + rng() * 0.18;
+        pushRoad(bx+w, bx+w+gap, bz1-0.1, bz2+0.1, 0.03 + rng()*0.03);
+        bx += w + gap;
+      }
+      x = blockEnd;
+    }
+  }
+
+  function makeColorGeo(pos, col) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    g.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(col), 3));
+    return g;
+  }
+
+  scene.add(new THREE.Mesh(makeColorGeo(fPos, fCol), new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.18,
+    side: THREE.DoubleSide, depthWrite: false,
+  })));
+  scene.add(new THREE.LineSegments(makeColorGeo(lPos, lCol), new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.22,
+  })));
+  scene.add(new THREE.Mesh(makeColorGeo(rPos, rCol), new THREE.MeshBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.22,
+    side: THREE.DoubleSide, depthWrite: false,
+  })));
+})();
+
+// ─── Дорожные частицы ────────────────────────────────────────────────
+// Продольные улицы между рядами кварталов
+const ROAD_ZS = [
+  (-3.2 + -5.0)   / 2,   // -4.10
+  (-8.0 + -10.5)  / 2,   // -9.25
+  (-13.5 + -16.0) / 2,   // -14.75
+];
+const CAR_COUNT = isMobile ? 45 : 90;
+const carGeo = new THREE.PlaneGeometry(0.55, 0.25);
+const carMat = new THREE.MeshBasicMaterial({
+  color: 0x1c1814, transparent: true, opacity: 0.45,
+  side: THREE.DoubleSide, depthWrite: false,
+});
+const cars = new THREE.InstancedMesh(carGeo, carMat, CAR_COUNT);
+scene.add(cars);
+
+const carData = [];
+const _dummy = new THREE.Object3D();
+_dummy.rotation.x = -Math.PI / 2; // константа — горизонтальные прямоугольники
+for (let i = 0; i < CAR_COUNT; i++) {
+  const rz = ROAD_ZS[i % ROAD_ZS.length];
+  const dir = (Math.random() < 0.5) ? 1 : -1;
+  carData.push({
+    x: (Math.random() - 0.5) * 48,
+    y: -10 + 0.12,
+    z: rz + (Math.random() - 0.5) * 0.35,
+    vx: dir * (0.04 + Math.random() * 0.05),
+  });
+}
+
+function updateCars() {
+  for (let i = 0; i < CAR_COUNT; i++) {
+    const d = carData[i];
+    d.x += d.vx;
+    if (d.x >  24.5) d.x = -24.5;
+    if (d.x < -24.5) d.x =  24.5;
+    _dummy.position.set(d.x, d.y, d.z);
+    _dummy.updateMatrix();
+    cars.setMatrixAt(i, _dummy.matrix);
+  }
+  cars.instanceMatrix.needsUpdate = true;
+}
+updateCars();
+
+// ─── Надпись коллекции ───────────────────────────────────────────────
+let titleMesh;
+(function () {
+  const W = 1024, H = 200;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Объёмные слои — смещённые копии для ощущения глубины
+  ctx.font = '100 48px "Segoe UI", sans-serif';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0.22em';
+  for (let i = 5; i >= 1; i--) {
+    ctx.fillStyle = `rgba(28,24,20,${0.025 * i})`;
+    ctx.fillText('BANGKOK GRAPHITE', W / 2 + i * 1.4, H / 2 - 18 + i * 1.4);
+  }
+  // Основной слой
+  ctx.fillStyle = 'rgba(28,24,20,0.50)';
+  ctx.fillText('BANGKOK GRAPHITE', W / 2, H / 2 - 18);
+
+  // Подпись
+  ctx.font = '300 18px "Segoe UI", sans-serif';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0.30em';
+  ctx.fillStyle = 'rgba(28,24,20,0.28)';
+  ctx.fillText('march 2026', W / 2, H / 2 + 36);
+
+  const tex = new THREE.CanvasTexture(c);
+  const ph = 2.0, pw = ph * (W / H);
+  titleMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(pw, ph),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
+  );
+  titleMesh.position.set(1, 7.5, -16);
+  scene.add(titleMesh);
+})();
+
+// ─── Звук города ─────────────────────────────────────────────────────
+(function () {
+  let started = false;
+
+  function startAudio() {
+    if (started) return;
+    started = true;
+
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const rate = ctx.sampleRate;
+    const len  = rate * 3; // 3-секундный буфер с петлёй
+
+    // Коричневый шум — низкочастотный гул трафика
+    const bufBrown = ctx.createBuffer(1, len, rate);
+    const dBrown   = bufBrown.getChannelData(0);
+    let b = 0;
+    for (let i = 0; i < len; i++) {
+      b = (b + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      dBrown[i] = b * 3.2;
+    }
+
+    // Розовый шум — средний гул улицы
+    const bufPink = ctx.createBuffer(1, len, rate);
+    const dPink   = bufPink.getChannelData(0);
+    let p0=0,p1=0,p2=0,p3=0,p4=0,p5=0,p6=0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      p0=0.99886*p0+w*0.0555179; p1=0.99332*p1+w*0.0750759;
+      p2=0.96900*p2+w*0.1538520; p3=0.86650*p3+w*0.3104856;
+      p4=0.55000*p4+w*0.5329522; p5=-0.7616*p5-w*0.0168980;
+      dPink[i] = (p0+p1+p2+p3+p4+p5+p6+w*0.5362) * 0.11;
+      p6 = w * 0.115926;
+    }
+
+    function makeLoop(buf, lpFreq, gain) {
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = lpFreq; lp.Q.value = 0.4;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, ctx.currentTime);
+      g.gain.linearRampToValueAtTime(gain, ctx.currentTime + 3.5); // плавный вход
+      src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+      src.start();
+    }
+
+    makeLoop(bufBrown, 320, 0.055); // трафик
+    makeLoop(bufPink,  900, 0.028); // общий гул
+  }
+
+  window.addEventListener('wheel',      startAudio, { once: true, passive: true });
+  window.addEventListener('click',      startAudio, { once: true });
+  window.addEventListener('touchstart', startAudio, { once: true, passive: true });
+})();
+
+// ─── Камера + мышь + скролл ──────────────────────────────────────────
 const mouse  = new THREE.Vector2();
 const target = new THREE.Vector2();
+let scrollZ = 14, scrollZTarget = 14;
+
 window.addEventListener('mousemove', e => {
   target.x =  (e.clientX / innerWidth  - 0.5) * 2;
   target.y = -(e.clientY / innerHeight - 0.5) * 2;
+  if (popup.classList.contains('open')) return;
+  _mouse2d.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(_mouse2d, camera);
+  document.body.style.cursor = raycaster.intersectObjects(workMeshes)[0] ? 'pointer' : 'default';
 });
+
+window.addEventListener('wheel', e => {
+  scrollZTarget = Math.max(10, Math.min(17, scrollZTarget - e.deltaY * 0.008));
+}, { passive: true });
+
+// Touch-скролл: свайп вверх — вперёд, вниз — назад
+let _touchScrollY = null;
+window.addEventListener('touchmove', e => {
+  if (popup.classList.contains('open')) return;
+  if (_touchScrollY === null) { _touchScrollY = e.touches[0].clientY; return; }
+  const dy = _touchScrollY - e.touches[0].clientY;
+  scrollZTarget = Math.max(10, Math.min(17, scrollZTarget - dy * 0.012));
+  _touchScrollY = e.touches[0].clientY;
+}, { passive: true });
+window.addEventListener('touchend', () => { _touchScrollY = null; }, { passive: true });
+
+// Гироскоп для параллакса на мобильном
+if (isMobile && window.DeviceOrientationEvent) {
+  let gyroBase = null;
+  const onGyro = e => {
+    const a = e.gamma || 0, b = e.beta || 0;
+    if (!gyroBase) gyroBase = { a, b };
+    target.x = Math.max(-1, Math.min(1, -(a - gyroBase.a) / 25));
+    target.y = Math.max(-1, Math.min(1, -(b - gyroBase.b) / 35));
+  };
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    const btn = document.createElement('button');
+    btn.textContent = I18N.t('gyro_enable');
+    btn.style.cssText = 'position:fixed;bottom:22px;right:22px;z-index:300;padding:10px 18px;border-radius:22px;background:#1a1a1a;color:#fff;border:none;font-size:11px;font-family:inherit;letter-spacing:0.08em;cursor:pointer;';
+    document.body.appendChild(btn);
+    btn.addEventListener('click', async () => {
+      try { if ((await DeviceOrientationEvent.requestPermission()) === 'granted') window.addEventListener('deviceorientation', onGyro, { passive: true }); } catch {}
+      btn.remove();
+    });
+  } else {
+    window.addEventListener('deviceorientation', onGyro, { passive: true });
+  }
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -353,24 +554,21 @@ window.addEventListener('resize', () => {
 });
 
 const clock = new THREE.Clock();
-function animate() {
+(function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
-
   mouse.x += (target.x - mouse.x) * 0.025;
   mouse.y += (target.y - mouse.y) * 0.025;
-
-  camera.position.x  =  mouse.x * 1.6;
-  camera.position.y  =  mouse.y * 0.9;
-  camera.position.z  = 18 + Math.sin(t * 0.06) * 0.8;
-  camera.lookAt(0, -1, 0);
-
-  // Очень медленное вращение — как ветер над городом
-  archGroup.rotation.y = Math.sin(t * 0.014) * 0.06;
-
+  scrollZ += (scrollZTarget - scrollZ) * 0.07;
+  camera.position.x = mouse.x * 2.38;
+  camera.position.y = 2 + mouse.y * 1.32;
+  camera.position.z = scrollZ + Math.sin(t * 0.07) * 0.5;
+  camera.lookAt(0, 0, 0);
+  titleMesh.position.y = 7.5 + Math.sin(t * 0.28 + 1.1) * 0.18;
+  titleMesh.position.x = 1   + Math.sin(t * 0.17 + 0.4) * 0.08;
+  updateCars();
   renderer.render(scene, camera);
-}
-animate();
+})();
 </script>
 </body>
 </html>

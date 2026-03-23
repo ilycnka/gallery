@@ -694,7 +694,7 @@ function animate() {
 
     collNameEl.textContent = frontObj.col.name[I18N.lang];
     // Кнопка входа — показываем только при достаточном приближении
-    const showEnter = !!frontObj.col.href && zoomFrac > 0.82;
+    const showEnter = !!frontObj.col.href && zoomFrac > 0.55;
     enterBtnEl._href = showEnter ? frontObj.col.href : null;
     enterBtnEl.classList.toggle('show', showEnter);
   }
