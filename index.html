@@ -1,14 +1,227 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gallery</title>
-  <link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>VoidWall</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden;
+      background: #ffffff;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    canvas { display: block; }
+
+    #logo {
+      position: fixed;
+      top: 13%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: clamp(40px, 9vw, 88px);
+      font-weight: 200;
+      color: rgba(0, 0, 0, 0.055);
+      letter-spacing: -0.02em;
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+    }
+  </style>
 </head>
 <body>
-  <canvas id="canvas"></canvas>
 
-  <script type="module" src="js/main.js"></script>
+<div id="logo">VoidWall</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
+
+// ─── Сцена ───
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 300);
+camera.position.set(0, 0, 9);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// ─── Волновые частицы ───
+const PCOUNT = isMobile ? 2800 : 9000;
+const waveGeo = new THREE.BufferGeometry();
+const wPos  = new Float32Array(PCOUNT * 3);
+const wBase = new Float32Array(PCOUNT * 3); // исходные XYZ — волна смещает только Y
+
+for (let i = 0; i < PCOUNT; i++) {
+  const x = (Math.random() - 0.5) * 46;
+  const y = (Math.random() - 0.5) * 30;
+  const z = (Math.random() - 0.5) * 26 + 9; // вокруг камеры
+  wBase[i*3] = wPos[i*3] = x;
+  wBase[i*3+1] = wPos[i*3+1] = y;
+  wBase[i*3+2] = wPos[i*3+2] = z;
+}
+
+waveGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3));
+scene.add(new THREE.Points(waveGeo, new THREE.PointsMaterial({
+  color: 0x888888,
+  size: isMobile ? 0.042 : 0.026,
+  transparent: true, opacity: 0.48,
+  sizeAttenuation: true, depthWrite: false,
+})));
+
+// ─── Надписи меню ───
+
+function createNavTexture(text, opacity) {
+  const w = 600, h = 88;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = `rgba(0,0,0,${opacity})`;
+  ctx.font = '200 44px Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, w / 2, h / 2);
+  return new THREE.CanvasTexture(c);
+}
+
+// offset: позиция относительно камеры
+const NAV = [
+  { text: 'select collection', href: 'collections.html', offset: [0, -0.4, -6.5], ry: 0, floatPhase: 0, floatAmp: 0.07, opacity: 0.42 },
+];
+
+const navMeshes = [];
+NAV.forEach(item => {
+  const tex = createNavTexture(item.text, item.opacity);
+  const ph = isMobile ? 0.72 : 0.82;
+  const pw = (600 / 88) * ph;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(pw, ph),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
+  );
+  scene.add(mesh);
+  navMeshes.push({ mesh, item });
+});
+
+// ─── Мышь / гироскоп ───
+const mouse = new THREE.Vector2();
+const targetMouse = new THREE.Vector2();
+
+window.addEventListener('mousemove', (e) => {
+  targetMouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  targetMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+
+if (isMobile && window.DeviceOrientationEvent) {
+  let base = null;
+  const handler = (e) => {
+    const a = e.gamma || 0, b = e.beta || 0;
+    if (!base) base = { a, b };
+    targetMouse.x = Math.max(-1, Math.min(1, (a - base.a) / 20));
+    targetMouse.y = Math.max(-1, Math.min(1, -(b - base.b) / 30));
+  };
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    const btn = document.createElement('button');
+    btn.textContent = '🔄 Разрешить гироскоп';
+    btn.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:300;padding:16px 28px;border-radius:30px;background:#1a1a1a;color:#fff;border:none;font-size:14px;font-family:inherit;cursor:pointer;';
+    document.body.appendChild(btn);
+    btn.addEventListener('click', async () => {
+      try { if ((await DeviceOrientationEvent.requestPermission()) === 'granted') window.addEventListener('deviceorientation', handler, { passive: true }); } catch {}
+      btn.remove();
+    });
+  } else {
+    window.addEventListener('deviceorientation', handler, { passive: true });
+  }
+}
+
+// ─── Клики / тапы ───
+const raycaster = new THREE.Raycaster();
+
+function handleTap(cx, cy) {
+  const m = new THREE.Vector2((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(m, camera);
+  const hit = raycaster.intersectObjects(navMeshes.map(n => n.mesh))[0];
+  const nav = hit ? navMeshes.find(n => n.mesh === hit.object) : null;
+  if (nav?.item.href) window.location.href = nav.item.href;
+}
+
+window.addEventListener('click', (e) => { if (!isMobile) handleTap(e.clientX, e.clientY); });
+
+let touchStart = null;
+window.addEventListener('touchstart', (e) => {
+  touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+window.addEventListener('touchend', (e) => {
+  if (!touchStart) return;
+  const dx = e.changedTouches[0].clientX - touchStart.x;
+  const dy = e.changedTouches[0].clientY - touchStart.y;
+  if (Math.abs(dx) < 10 && Math.abs(dy) < 10) handleTap(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  touchStart = null;
+}, { passive: true });
+
+window.addEventListener('mousemove', (e) => {
+  const m = new THREE.Vector2((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+  raycaster.setFromCamera(m, camera);
+  const hit = raycaster.intersectObjects(navMeshes.map(n => n.mesh))[0];
+  const nav = hit ? navMeshes.find(n => n.mesh === hit.object) : null;
+  renderer.domElement.style.cursor = nav?.item.href ? 'pointer' : 'default';
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── Анимация ───
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  mouse.x += (targetMouse.x - mouse.x) * 0.04;
+  mouse.y += (targetMouse.y - mouse.y) * 0.04;
+
+  // Лёгкое дыхание вперёд-назад + покачивание
+  camera.position.z = 9 + Math.sin(t * 0.11) * 3.5;
+  camera.position.y =     Math.sin(t * 0.07) * 0.25;
+  camera.position.x =     Math.sin(t * 0.09) * 0.15;
+
+  // Реакция на мышь
+  camera.rotation.y = -mouse.x * 0.08;
+  camera.rotation.x =  mouse.y * 0.05;
+
+  // Волновое движение частиц — 4 интерферирующих синуса
+  const wp = waveGeo.attributes.position.array;
+  for (let i = 0; i < PCOUNT; i++) {
+    const bx = wBase[i*3], bz = wBase[i*3+2];
+    wp[i*3+1] = wBase[i*3+1]
+      + Math.sin(bx * 0.18 + t * 0.55) * 1.6
+      + Math.sin(bz * 0.24 + t * 0.78) * 1.2
+      + Math.sin((bx + bz) * 0.31 + t * 1.10) * 0.8
+      + Math.cos(bx * 0.45 - bz * 0.22 + t * 0.42) * 0.5;
+  }
+  waveGeo.attributes.position.needsUpdate = true;
+
+  // Парящие надписи — следуют за камерой с фиксированным смещением
+  navMeshes.forEach(({ mesh, item }) => {
+    mesh.position.set(
+      camera.position.x + item.offset[0],
+      camera.position.y + item.offset[1] + Math.sin(t * 0.42 + item.floatPhase) * item.floatAmp,
+      camera.position.z + item.offset[2]
+    );
+    mesh.rotation.y = camera.rotation.y + item.ry;
+  });
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
 </body>
 </html>

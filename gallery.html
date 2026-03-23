@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Галерея — 3D пространство</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="overlay">
+  <div class="logo">Галерея <span>3D пространство</span></div>
+  <div class="counter" id="counter"></div>
+</div>
+
+<div id="hint">скролл — скорость · нажмите на работу · двигайте мышь</div>
+
+<div id="speed-control">
+  <label>Скорость</label>
+  <input type="range" id="speedSlider" min="0" max="100" value="35" />
+</div>
+
+<div id="detail">
+  <button id="detail-close">✕</button>
+  <div id="detail-inner">
+    <canvas id="detail-art" width="340" height="420"></canvas>
+    <div id="detail-info">
+      <div class="meta" id="d-meta"></div>
+      <h2 id="d-title"></h2>
+      <div class="line" id="d-line"></div>
+      <p class="desc">Оригинальная работа. При покупке вы становитесь единственным владельцем — ваше имя отображается на произведении в галерее.</p>
+      <div class="price" id="d-price"></div>
+      <button id="d-btn">ПРИОБРЕСТИ</button>
+      <div id="detail-owner-badge"><span class="dot"></span><span id="d-owner-name"></span></div>
+      <div class="back" id="d-back">← назад в галерею</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

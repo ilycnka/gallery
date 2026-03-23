@@ -1,71 +1,92 @@
-// Управление камерой: мышь, тач и гироскоп
+// Управление: мышь, тач-события, гироскоп, колесо прокрутки
+export function initControls(isMobile, onTap) {
+  const mouse = new THREE.Vector2();
+  const targetMouse = new THREE.Vector2();
+  let speed = 0.02;
+  let targetSpeed = 0.02;
 
-export function initControls(camera, canvas) {
-  initMouseControls(camera, canvas);
-  initTouchControls(camera, canvas);
-  initGyroscope(camera);
-}
-
-// Управление мышью
-function initMouseControls(camera, canvas) {
-  let isDragging = false;
-  let prevX = 0;
-  let prevY = 0;
-
-  canvas.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    prevX = e.clientX;
-    prevY = e.clientY;
+  // Слайдер скорости
+  const speedSlider = document.getElementById('speedSlider');
+  speedSlider.addEventListener('input', () => {
+    targetSpeed = (speedSlider.value / 100) * 0.08;
   });
 
-  canvas.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    const dx = e.clientX - prevX;
-    const dy = e.clientY - prevY;
-    rotateCamera(camera, dx, dy);
-    prevX = e.clientX;
-    prevY = e.clientY;
+  // Колесо мыши меняет скорость
+  window.addEventListener('wheel', (e) => {
+    targetSpeed = Math.max(0, Math.min(0.1, targetSpeed + e.deltaY * 0.00005));
+    speedSlider.value = (targetSpeed / 0.08) * 100;
+  }, { passive: true });
+
+  // Движение мыши управляет камерой
+  window.addEventListener('mousemove', (e) => {
+    targetMouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    targetMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   });
 
-  canvas.addEventListener('mouseup', () => { isDragging = false; });
-  canvas.addEventListener('mouseleave', () => { isDragging = false; });
-}
+  // Тач-управление
+  let touchStartX = 0, touchStartY = 0, touchMoved = false, isTouchDrag = false;
 
-// Тач-управление
-function initTouchControls(camera, canvas) {
-  let prevTouchX = 0;
-  let prevTouchY = 0;
+  window.addEventListener('touchstart', (e) => {
+    if (e.target.closest('#speed-control') || e.target.closest('#detail')) return;
+    const t = e.touches[0];
+    touchStartX = t.clientX; touchStartY = t.clientY;
+    touchMoved = false; isTouchDrag = true;
+  }, { passive: true });
 
-  canvas.addEventListener('touchstart', (e) => {
-    prevTouchX = e.touches[0].clientX;
-    prevTouchY = e.touches[0].clientY;
-  });
+  window.addEventListener('touchmove', (e) => {
+    if (!isTouchDrag) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) touchMoved = true;
+    targetMouse.x = Math.max(-1, Math.min(1, dx * 0.004));
+    targetMouse.y = Math.max(-1, Math.min(1, -dy * 0.004));
+  }, { passive: true });
 
-  canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    const dx = e.touches[0].clientX - prevTouchX;
-    const dy = e.touches[0].clientY - prevTouchY;
-    rotateCamera(camera, dx, dy);
-    prevTouchX = e.touches[0].clientX;
-    prevTouchY = e.touches[0].clientY;
-  }, { passive: false });
-}
+  window.addEventListener('touchend', (e) => {
+    if (!touchMoved && isTouchDrag) {
+      const touch = e.changedTouches[0];
+      onTap(touch.clientX, touch.clientY);
+    }
+    isTouchDrag = false;
+    targetMouse.x *= 0.3; targetMouse.y *= 0.3;
+  }, { passive: true });
 
-// Гироскоп (мобильные устройства)
-function initGyroscope(camera) {
-  window.addEventListener('deviceorientation', (e) => {
-    if (e.beta === null || e.gamma === null) return;
-    // Нормализуем углы в небольшое смещение камеры
-    camera.rotation.x = THREE.MathUtils.degToRad(e.beta - 90) * 0.1;
-    camera.rotation.y = THREE.MathUtils.degToRad(e.gamma) * 0.1;
-  });
-}
+  // Гироскоп на мобильных
+  let gyroEnabled = false, gyroBaseAlpha = null, gyroBaseBeta = null;
 
-// Поворот камеры на основе дельты движения
-function rotateCamera(camera, dx, dy) {
-  const sensitivity = 0.003;
-  camera.rotation.y -= dx * sensitivity;
-  camera.rotation.x -= dy * sensitivity;
-  // Ограничиваем вертикальный угол
-  camera.rotation.x = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, camera.rotation.x));
+  function startGyro() {
+    window.addEventListener('deviceorientation', (e) => {
+      if (!gyroEnabled) return;
+      const alpha = e.gamma || 0, beta = e.beta || 0;
+      if (gyroBaseAlpha === null) { gyroBaseAlpha = alpha; gyroBaseBeta = beta; }
+      targetMouse.x = Math.max(-1, Math.min(1, (alpha - gyroBaseAlpha) / 30));
+      targetMouse.y = Math.max(-1, Math.min(1, -(beta - gyroBaseBeta) / 40));
+    }, { passive: true });
+  }
+
+  if (isMobile && window.DeviceOrientationEvent) {
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const gb = document.createElement('button');
+      gb.textContent = '🔄 Включить гироскоп';
+      gb.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:300;padding:16px 28px;border-radius:30px;background:#1a1a1a;color:#fff;border:none;font-size:14px;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent;box-shadow:0 8px 30px rgba(0,0,0,0.15);';
+      document.body.appendChild(gb);
+      gb.addEventListener('click', async () => {
+        try {
+          if ((await DeviceOrientationEvent.requestPermission()) === 'granted') {
+            gyroEnabled = true; startGyro();
+          }
+        } catch {}
+        gb.remove();
+      });
+    } else {
+      gyroEnabled = true; startGyro();
+    }
+  }
+
+  function updateSpeed() {
+    speed += (targetSpeed - speed) * 0.03;
+    return speed;
+  }
+
+  return { mouse, targetMouse, updateSpeed };
 }
