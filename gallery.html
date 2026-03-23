@@ -294,10 +294,11 @@ window.addEventListener('touchend', e => {
     { zFront:-16.0, zBack:-19.0 },
   ];
 
-  // Продольные улицы (между рядами)
-  pushRoad(-24, 24, blockRows[1].zFront, blockRows[0].zBack, 0.055);
-  pushRoad(-24, 24, blockRows[2].zFront, blockRows[1].zBack, 0.045);
-  pushRoad(-24, 24, blockRows[3].zFront, blockRows[2].zBack, 0.035);
+  // Продольные улицы (между рядами) — только между существующими
+  for (let r = 1; r < blockRows.length; r++) {
+    const shade = 0.055 - (r - 1) * 0.01;
+    pushRoad(-24, 24, blockRows[r].zFront, blockRows[r - 1].zBack, shade);
+  }
 
   for (const row of blockRows) {
     const zF = row.zFront, zB = row.zBack, depth = zF - zB;
