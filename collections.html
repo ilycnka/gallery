@@ -14,13 +14,13 @@
     canvas { display: block; }
     #back {
       position: fixed; top: 22px; left: 22px; z-index: 50;
-      font-size: 11px; color: #334; letter-spacing: 0.08em;
+      font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 0.08em;
       cursor: pointer; text-decoration: none; transition: color 0.2s;
     }
-    #back:hover { color: #88aacc; }
+    #back:hover { color: rgba(255,255,255,0.8); }
     #wordmark {
       position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
-      font-size: 10px; color: #223; letter-spacing: 0.22em; text-transform: uppercase;
+      font-size: 10px; color: rgba(255,255,255,0.22); letter-spacing: 0.22em; text-transform: uppercase;
       z-index: 50; pointer-events: none;
     }
     #collection-info {
@@ -34,12 +34,21 @@
       font-size: 11px; letter-spacing: 0.30em; text-transform: uppercase;
       color: #080e18;
     }
-    #collection-zoom-hint {
-      margin-top: 8px;
-      font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase;
-      color: #3a6080; opacity: 0; transition: opacity 0.4s ease;
+    #enter-btn {
+      display: block; margin-top: 16px;
+      padding: 9px 22px;
+      background: rgba(8,14,28,0.78);
+      border: 1px solid rgba(80,140,220,0.32);
+      border-radius: 22px;
+      font-family: inherit; font-size: 9px;
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: #7ab0d8; cursor: pointer;
+      pointer-events: auto;
+      backdrop-filter: blur(8px);
+      opacity: 0; transition: opacity 0.4s ease, background 0.2s, color 0.2s;
     }
-    #collection-zoom-hint.show { opacity: 1; }
+    #enter-btn.show { opacity: 1; }
+    #enter-btn:hover { background: rgba(16,28,56,0.90); color: #aad0ee; }
 
     #overlay {
       position: fixed; inset: 0; z-index: 100;
@@ -48,6 +57,15 @@
       transition: opacity 0.55s ease;
     }
     #overlay.fade { opacity: 1; }
+
+    #sound-btn {
+      position: fixed; bottom: 22px; left: 22px; z-index: 50;
+      background: none; border: none; cursor: pointer;
+      padding: 4px; opacity: 0.35; transition: opacity 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #sound-btn:hover { opacity: 0.75; }
+    #sound-btn svg { display: block; width: 18px; height: 18px; }
 
     #zoom-ring {
       position: fixed; bottom: 22px; right: 22px; z-index: 50;
@@ -103,8 +121,15 @@
 <div id="overlay"></div>
 <div id="collection-info">
   <div id="collection-name"></div>
-  <div id="collection-zoom-hint">скролл чтобы перейти</div>
+  <button id="enter-btn"></button>
 </div>
+<button id="sound-btn" title="sound">
+  <svg viewBox="0 0 18 18" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6.5H6L10 3v12L6 11.5H3z"/>
+    <path id="sound-wave1" d="M12.5 6.5a3 3 0 0 1 0 5"/>
+    <path id="sound-wave2" d="M14 4.5a5.5 5.5 0 0 1 0 9"/>
+  </svg>
+</button>
 <div id="zoom-ring">
   <svg viewBox="0 0 26 26">
     <circle id="zoom-arc" cx="13" cy="13" r="11.5"/>
@@ -120,7 +145,6 @@
 const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || innerWidth < 768;
 I18N.addToggle('dark');
 document.getElementById('back').textContent = I18N.t('back');
-document.getElementById('collection-zoom-hint').textContent = I18N.t('zoom_hint');
 
 const COLLECTIONS = [
   { name: { ru: 'Bangkok Graphite', en: 'Bangkok Graphite' }, href: 'gallery.html' },
@@ -156,10 +180,20 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020408);
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
 camera.position.set(0, 0, 9);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(isMobile ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
+
+// ─── Освещение ───
+const ambientLight = new THREE.AmbientLight(0x111827, 0.6);
+scene.add(ambientLight);
+const keyLight = new THREE.PointLight(0xffffff, 1.8, 60);
+keyLight.position.set(6, 8, 12);
+scene.add(keyLight);
+const fillLight = new THREE.PointLight(0x3366cc, 0.7, 40);
+fillLight.position.set(-8, -4, 6);
+scene.add(fillLight);
 
 // ─── Звёзды ───
 (function () {
@@ -187,15 +221,17 @@ scene.add(group);
 
 const POLY_R = isMobile ? 2.6 : 3.0;
 
-// ─── Фоновый скелет: три вложенных многогранника ───
+// ─── Фоновый скелет: три вложенных многогранника (на мобильном только основной) ───
 const polyGeo  = new THREE.IcosahedronGeometry(POLY_R, 1);
 const edgesGeo = new THREE.EdgesGeometry(polyGeo);
 group.add(new THREE.LineSegments(edgesGeo,
   new THREE.LineBasicMaterial({ color: 0x0d1e36, transparent: true, opacity: 0.22 })));
-group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.DodecahedronGeometry(POLY_R * 0.74, 0)),
-  new THREE.LineBasicMaterial({ color: 0x091529, transparent: true, opacity: 0.16 })));
-group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(POLY_R * 0.42, 0)),
-  new THREE.LineBasicMaterial({ color: 0x060f1e, transparent: true, opacity: 0.18 })));
+if (!isMobile) {
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.DodecahedronGeometry(POLY_R * 0.74, 0)),
+    new THREE.LineBasicMaterial({ color: 0x091529, transparent: true, opacity: 0.16 })));
+  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(POLY_R * 0.42, 0)),
+    new THREE.LineBasicMaterial({ color: 0x060f1e, transparent: true, opacity: 0.18 })));
+}
 
 // ─── Glow-текстура ───
 const glowTex = (function () {
@@ -212,20 +248,19 @@ const glowTex = (function () {
 })();
 
 // ─── Частицы ───
-// Показатель степени > 1 → плотность сгущается к центру (f_r ∝ r^(1/α − 1))
 (function () {
-  const N = isMobile ? 20000 : 76000;
+  const N = isMobile ? 3500 : 76000;
   const R_MAX = POLY_R * 10;
   const pos = new Float32Array(N * 3);
   const col = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {
     const θ = Math.random() * Math.PI * 2;
     const φ = Math.acos(2 * Math.random() - 1);
-    const r = R_MAX * Math.pow(Math.random(), 2.2); // плотность ~r^-1.55, сгущается к центру
+    const r = R_MAX * Math.pow(Math.random(), 2.2);
     pos[i*3]   = r * Math.sin(φ) * Math.cos(θ);
     pos[i*3+1] = r * Math.cos(φ);
     pos[i*3+2] = r * Math.sin(φ) * Math.sin(θ);
-    const bright = Math.max(0.04, 0.90 - (r / R_MAX) * 0.82); // яркость падает к краям
+    const bright = Math.max(0.04, 0.90 - (r / R_MAX) * 0.82);
     const t = Math.random();
     col[i*3]   = (0.45 + t * 0.55) * bright;
     col[i*3+1] = (0.65 + t * 0.35) * bright;
@@ -234,14 +269,12 @@ const glowTex = (function () {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-  // Явная ограничивающая сфера — иначе Three.js может срезать дальние частицы фрустумом
   geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), R_MAX);
-  group.add(new THREE.Points(geo, new THREE.PointsMaterial({
-    size: isMobile ? 0.052 : 0.040,
-    vertexColors: true, map: glowTex,
-    transparent: true, opacity: 1.0,
-    blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
-  })));
+  // На мобильном: без glow-текстуры и аддитивного блендинга — намного быстрее
+  const mat = isMobile
+    ? new THREE.PointsMaterial({ size: 0.06, vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false, sizeAttenuation: true })
+    : new THREE.PointsMaterial({ size: 0.040, vertexColors: true, map: glowTex, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
+  group.add(new THREE.Points(geo, mat));
 })();
 
 // ─── Вершины икосаэдра → направления для объектов ───
@@ -340,8 +373,8 @@ const objects = objectVerts.map((vert, i) => {
   const cBase     = new THREE.Color(baseHex).multiplyScalar(0.55);
   const cActive   = new THREE.Color(baseHex).multiplyScalar(1.50);
 
-  const sphereMat = new THREE.MeshBasicMaterial({ color: cBase.clone(), transparent: true, opacity: 1.0, depthWrite: false });
-  const sphere    = new THREE.Mesh(new THREE.SphereGeometry(SPHERE_R, 22, 14), sphereMat);
+  const sphereMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x000000), emissive: cBase.clone(), emissiveIntensity: 1.0, roughness: 1.0, metalness: 0.0, transparent: true, opacity: 0.75, depthWrite: false });
+  const sphere    = new THREE.Mesh(new THREE.SphereGeometry(SPHERE_R, isMobile ? 10 : 22, isMobile ? 6 : 14), sphereMat);
   sphere.position.copy(vert);
   group.add(sphere);
 
@@ -413,7 +446,7 @@ window.addEventListener('langchange', () => {
     if (span) span.textContent = I18N.t(HINTS[hintState].key);
   }
   document.getElementById('back').textContent = I18N.t('back');
-  document.getElementById('collection-zoom-hint').textContent = I18N.t('zoom_hint');
+  enterBtnEl.textContent = I18N.t('enter_collection');
 });
 
 // Показать подсказку о вращении через 1.5 с
@@ -441,8 +474,10 @@ function dragStart(x, y) {
 }
 function dragMove(x, y) {
   if (!drag) return;
-  qRY.setFromAxisAngle(AY, (x - px) * 0.007);
-  qRX.setFromAxisAngle(AX, (y - py) * 0.007);
+  const rotFrac = Math.max(0.06, (camera.position.z - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN));
+  const sens = 0.007 * rotFrac;
+  qRY.setFromAxisAngle(AY, (x - px) * sens);
+  qRX.setFromAxisAngle(AX, (y - py) * sens);
   quatTarget.premultiply(qRY).premultiply(qRX);
   px = x; py = y;
 }
@@ -484,23 +519,45 @@ window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-const collInfoEl     = document.getElementById('collection-info');
-const collNameEl     = document.getElementById('collection-name');
-const collZoomHintEl = document.getElementById('collection-zoom-hint');
+const collInfoEl = document.getElementById('collection-info');
+const collNameEl = document.getElementById('collection-name');
+const enterBtnEl = document.getElementById('enter-btn');
+enterBtnEl.textContent = I18N.t('enter_collection');
+enterBtnEl.addEventListener('click', () => {
+  if (enterBtnEl._href) {
+    overlayEl.classList.add('fade');
+    setTimeout(() => { window.location.href = enterBtnEl._href; }, 550);
+  }
+});
 
 // ─── Аудио (Web Audio API) ───
 let _ac = null, _osc1 = null, _osc2 = null, _filt = null, _mGain = null;
+let _melodOsc = null, _muted = false, _targetVol = 0.32;
+
+// Пентатоника Ре-минор (D3 D4 F3 A3 C4 E3) — мелодичная последовательность
+const MELODY = [147, 175, 220, 196, 262, 165, 220, 175, 196, 247, 175, 220];
+let _noteIdx = 0;
+
+function _scheduleNote() {
+  if (!_ac || _muted) return;
+  const freq = MELODY[_noteIdx % MELODY.length];
+  _noteIdx++;
+  _melodOsc.frequency.setTargetAtTime(freq, _ac.currentTime, 0.18);
+  setTimeout(_scheduleNote, 1600 + Math.random() * 1400);
+}
 
 function _initAudio() {
   if (_ac) return;
   try { _ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
   _ac.resume();
 
-  // Основной тон — слышимый диапазон 180–360 Гц
-  _osc1 = _ac.createOscillator(); _osc1.type = 'sine';    _osc1.frequency.value = 180;
-  _osc2 = _ac.createOscillator(); _osc2.type = 'sine';    _osc2.frequency.value = 180.6; // биение 0.6 Гц
-  const osc3 = _ac.createOscillator(); osc3.type = 'sine'; osc3.frequency.value = 270;   // квинта
-  const osc4 = _ac.createOscillator(); osc4.type = 'triangle'; osc4.frequency.value = 90; // октава ниже
+  // Дроун-основа: два осциллятора с биением
+  _osc1 = _ac.createOscillator(); _osc1.type = 'sine';     _osc1.frequency.value = 110;
+  _osc2 = _ac.createOscillator(); _osc2.type = 'sine';     _osc2.frequency.value = 110.5;
+  // Мелодический осциллятор поверх дрона
+  _melodOsc = _ac.createOscillator(); _melodOsc.type = 'triangle'; _melodOsc.frequency.value = 220;
+  // Тихая субгармоника для глубины
+  const oscSub = _ac.createOscillator(); oscSub.type = 'sine'; oscSub.frequency.value = 55;
 
   // Шум — космический шелест
   const nLen = Math.floor(_ac.sampleRate * 4);
@@ -508,29 +565,59 @@ function _initAudio() {
   const nd = nBuf.getChannelData(0);
   for (let i = 0; i < nLen; i++) nd[i] = Math.random() * 2 - 1;
   const noise = _ac.createBufferSource(); noise.buffer = nBuf; noise.loop = true;
-  const nFilt = _ac.createBiquadFilter(); nFilt.type = 'bandpass'; nFilt.frequency.value = 800; nFilt.Q.value = 2;
-  const nGain = _ac.createGain(); nGain.gain.value = 0.06;
+  const nFilt = _ac.createBiquadFilter(); nFilt.type = 'bandpass'; nFilt.frequency.value = 600; nFilt.Q.value = 2;
+  const nGain = _ac.createGain(); nGain.gain.value = 0.045;
+
+  // Мелодия через реверб-дилей (один эхо-отражение)
+  const delay = _ac.createDelay(1.0); delay.delayTime.value = 0.42;
+  const delFb  = _ac.createGain(); delFb.gain.value = 0.38;
+  const delOut = _ac.createGain(); delOut.gain.value = 0.28;
 
   // Финальный фильтр — открывается при зуме
-  _filt = _ac.createBiquadFilter(); _filt.type = 'lowpass'; _filt.frequency.value = 900; _filt.Q.value = 4;
-
+  _filt = _ac.createBiquadFilter(); _filt.type = 'lowpass'; _filt.frequency.value = 900; _filt.Q.value = 3;
   _mGain = _ac.createGain(); _mGain.gain.value = 0;
 
-  const g1 = _ac.createGain(); g1.gain.value = 0.35;
-  const g2 = _ac.createGain(); g2.gain.value = 0.30;
-  const g3 = _ac.createGain(); g3.gain.value = 0.15;
-  const g4 = _ac.createGain(); g4.gain.value = 0.18;
+  const gD  = _ac.createGain(); gD.gain.value = 0.30;  // дрон 1
+  const gD2 = _ac.createGain(); gD2.gain.value = 0.26; // дрон 2
+  const gM  = _ac.createGain(); gM.gain.value = 0.22;  // мелодия прямой сигнал
+  const gS  = _ac.createGain(); gS.gain.value = 0.12;  // суббас
 
-  _osc1.connect(g1); g1.connect(_filt);
-  _osc2.connect(g2); g2.connect(_filt);
-  osc3.connect(g3); g3.connect(_filt);
-  osc4.connect(g4); g4.connect(_filt);
+  // Маршрутизация дрона
+  _osc1.connect(gD);  gD.connect(_filt);
+  _osc2.connect(gD2); gD2.connect(_filt);
+  oscSub.connect(gS); gS.connect(_filt);
+  // Мелодия + эхо
+  _melodOsc.connect(gM); gM.connect(_filt);
+  _melodOsc.connect(delay); delay.connect(delFb); delFb.connect(delay);
+  delay.connect(delOut); delOut.connect(_filt);
+  // Шум
   noise.connect(nFilt); nFilt.connect(nGain); nGain.connect(_filt);
+
   _filt.connect(_mGain); _mGain.connect(_ac.destination);
 
-  _osc1.start(); _osc2.start(); osc3.start(); osc4.start(); noise.start();
-  _mGain.gain.linearRampToValueAtTime(0.35, _ac.currentTime + 2.5);
+  _osc1.start(); _osc2.start(); _melodOsc.start(); oscSub.start(); noise.start();
+  _mGain.gain.linearRampToValueAtTime(_targetVol, _ac.currentTime + 2.5);
+
+  // Запуск мелодии
+  setTimeout(_scheduleNote, 1800);
 }
+
+// ─── Кнопка звука ───
+const soundBtn  = document.getElementById('sound-btn');
+const wave1El   = document.getElementById('sound-wave1');
+const wave2El   = document.getElementById('sound-wave2');
+
+soundBtn.addEventListener('click', () => {
+  _initAudio();
+  _muted = !_muted;
+  if (_ac) {
+    const t = _ac.currentTime;
+    _mGain.gain.setTargetAtTime(_muted ? 0 : _targetVol, t, 0.25);
+  }
+  wave1El.style.opacity = _muted ? '0.15' : '1';
+  wave2El.style.opacity = _muted ? '0.15' : '1';
+  soundBtn.style.opacity = _muted ? '0.22' : '0.35';
+});
 
 ['mousedown', 'touchstart', 'wheel'].forEach(ev =>
   window.addEventListener(ev, _initAudio, { once: true, passive: true })
@@ -546,8 +633,13 @@ function animate() {
   requestAnimationFrame(animate);
 
   if (!drag) {
-    qRY.setFromAxisAngle(AY, 0.0012);
-    quatTarget.premultiply(qRY);
+    // Авторотация: полная при max зуме-аут, останавливается при зуме-ин
+    const rotFrac = Math.max(0, (camera.position.z - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN));
+    const autoSpeed = 0.002 * rotFrac;
+    if (autoSpeed > 0.00005) {
+      qRY.setFromAxisAngle(AY, autoSpeed);
+      quatTarget.premultiply(qRY);
+    }
   }
   quatCurrent.slerp(quatTarget, 0.08);
   group.quaternion.copy(quatCurrent);
@@ -579,14 +671,15 @@ function animate() {
     const isFront = o === frontObj && maxDot > 0.20;
     o.frontT += ((isFront ? 1 : 0) - o.frontT) * 0.055;
 
-    // Сфера растворяется — при полном выделении становится невидимой
-    o.sphereMat.color.copy(o.cBase).lerp(o.cActive, o.frontT);
-    o.sphereMat.opacity = 1.0 - o.frontT * 0.98;
+    // Сфера — самосвечение нарастает при выделении, потом растворяется в свет
+    o.sphereMat.emissive.copy(o.cBase).lerp(o.cActive, o.frontT);
+    o.sphereMat.emissiveIntensity = 1.0 + o.frontT * 1.8;
+    o.sphereMat.opacity = 0.75 - o.frontT * 0.73;
 
-    // Свечение расширяется в чистый свет
+    // Свечение: в покое почти невидимо, при активации расширяется в чистый свет
     o.glowMat.color.copy(o.cBase).lerp(o.cActive, o.frontT);
-    o.glow.scale.setScalar(GLOW_SIZE * (1.0 + o.frontT * 4.0));
-    o.glowMat.opacity = 0.45 + o.frontT * 0.45;
+    o.glow.scale.setScalar(GLOW_SIZE * (0.35 + o.frontT * 4.65));
+    o.glowMat.opacity = 0.06 + o.frontT * 0.84;
   });
 
   // Название коллекции на месте объекта
@@ -600,7 +693,10 @@ function animate() {
     collInfoEl.style.top  = `${(-_wp.y * 0.5 + 0.5) * innerHeight}px`;
 
     collNameEl.textContent = frontObj.col.name[I18N.lang];
-    collZoomHintEl.classList.toggle('show', !!frontObj.col.href);
+    // Кнопка входа — показываем только при достаточном приближении
+    const showEnter = !!frontObj.col.href && zoomFrac > 0.82;
+    enterBtnEl._href = showEnter ? frontObj.col.href : null;
+    enterBtnEl.classList.toggle('show', showEnter);
   }
 
   // Кольцо зума — показываем только когда передний объект кликабелен
@@ -613,20 +709,6 @@ function animate() {
     // Цвет кольца = цвет объекта
     const c = frontObj.sphereMat.color;
     zoomArcEl.style.stroke = `rgb(${(c.r*255)|0},${(c.g*255)|0},${(c.b*255)|0})`;
-  }
-
-  // Переход при максимальном зуме-ин на кликабельный объект
-  if (!transitioning && zoomFrac > 0.93 && frontObj?.col.href && frontObj.frontT > 0.55) {
-    transitioning = true;
-    overlayEl.classList.add('fade');
-    setTimeout(() => { window.location.href = frontObj.col.href; }, 600);
-  }
-
-  // Переход при максимальном зуме-аут → главная страница
-  if (!transitioning && zoomFrac < 0.07) {
-    transitioning = true;
-    overlayEl.classList.add('fade');
-    setTimeout(() => { window.location.href = 'index.html'; }, 600);
   }
 
   renderer.render(scene, camera);

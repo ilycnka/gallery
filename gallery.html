@@ -1,58 +1,376 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Галерея — 3D пространство</title>
-  <link rel="stylesheet" href="css/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gallery — VoidWall</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #eceae5;
+      min-height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+    canvas#bg { position: fixed; inset: 0; z-index: 0; display: block; }
+    #back {
+      position: fixed; top: 22px; left: 22px; z-index: 100;
+      font-size: 11px; color: rgba(0,0,0,0.28); letter-spacing: 0.08em;
+      text-decoration: none; transition: color 0.2s;
+    }
+    #back:hover { color: rgba(0,0,0,0.65); }
+    .page { position: fixed; inset: 0; z-index: 1; }
+    .artwork { position: absolute; cursor: pointer; }
+    .artwork .img { display: block; }
+    .artwork .title {
+      margin-top: 7px; font-size: 10px;
+      letter-spacing: 0.12em; color: rgba(0,0,0,0.32);
+      text-transform: uppercase;
+    }
+    .artwork:nth-child(1) { top: 12%; left: 8%;  }
+    .artwork:nth-child(2) { top: 8%;  left: 42%; }
+    .artwork:nth-child(3) { top: 18%; left: 68%; }
+    .artwork:nth-child(4) { top: 52%; left: 22%; }
+    .artwork:nth-child(5) { top: 48%; left: 58%; }
+  </style>
 </head>
 <body>
 
-<div id="overlay">
-  <div class="logo" id="gallery-title">Галерея <span id="gallery-sub">3D пространство</span></div>
-  <div class="counter" id="counter"></div>
-</div>
+<canvas id="bg"></canvas>
+<a id="back" href="collections.html">← back</a>
 
-<div id="hint"></div>
-
-<div id="speed-control">
-  <label id="speed-label">Скорость</label>
-  <input type="range" id="speedSlider" min="0" max="100" value="35" />
-</div>
-
-<div id="detail">
-  <button id="detail-close">✕</button>
-  <div id="detail-inner">
-    <canvas id="detail-art" width="340" height="420"></canvas>
-    <div id="detail-info">
-      <div class="meta" id="d-meta"></div>
-      <h2 id="d-title"></h2>
-      <div class="line" id="d-line"></div>
-      <p class="desc" id="art-desc">Оригинальная работа. При покупке вы становитесь единственным владельцем — ваше имя отображается на произведении в галерее.</p>
-      <div class="price" id="d-price"></div>
-      <button id="d-btn">ПРИОБРЕСТИ</button>
-      <div id="detail-owner-badge"><span class="dot"></span><span id="d-owner-name"></span></div>
-      <div class="back" id="d-back">← назад в галерею</div>
-
-    </div>
+<div class="page">
+  <div class="artwork">
+    <canvas class="img" width="220" height="300"></canvas>
+    <div class="title">Artwork 1</div>
+  </div>
+  <div class="artwork">
+    <canvas class="img" width="260" height="200"></canvas>
+    <div class="title">Artwork 2</div>
+  </div>
+  <div class="artwork">
+    <canvas class="img" width="180" height="240"></canvas>
+    <div class="title">Artwork 3</div>
+  </div>
+  <div class="artwork">
+    <canvas class="img" width="240" height="180"></canvas>
+    <div class="title">Artwork 4</div>
+  </div>
+  <div class="artwork">
+    <canvas class="img" width="200" height="260"></canvas>
+    <div class="title">Artwork 5</div>
   </div>
 </div>
 
 <script src="js/i18n.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// Применяем переводы к статичным элементам галереи
-function applyGalleryLang() {
-  document.getElementById('gallery-title').firstChild.textContent = I18N.t('gallery_title') + ' ';
-  document.getElementById('gallery-sub').textContent = I18N.t('gallery_sub');
-  document.getElementById('speed-label').textContent = I18N.t('speed_label');
-  document.getElementById('art-desc').textContent = I18N.t('art_desc');
-  document.getElementById('d-back').textContent = I18N.t('back_gallery');
+I18N.addToggle('light');
+document.getElementById('back').textContent = '← ' + I18N.t('back');
+window.addEventListener('langchange', () => {
+  document.getElementById('back').textContent = '← ' + I18N.t('back');
+});
+
+// Заглушки — нейтральные тона
+document.querySelectorAll('.artwork .img').forEach((c, i) => {
+  const ctx = c.getContext('2d');
+  const shades = ['#e0dbd5', '#d5dbe0', '#dde0d5', '#e0d5d5', '#d5d8e0'];
+  ctx.fillStyle = shades[i];
+  ctx.fillRect(0, 0, c.width, c.height);
+});
+
+// ─── Three.js ───
+const canvas = document.getElementById('bg');
+const scene   = new THREE.Scene();
+const camera  = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 0, 18);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+
+// ─── Архитектура Бангкока в линиях ───
+function buildBangkok() {
+  const main   = []; // основные контуры зданий
+  const detail = []; // горизонтали, кольца, детали
+  const depth  = []; // земля, перспективные линии
+
+  function m(x1,y1,z1,x2,y2,z2) { main.push(x1,y1,z1,x2,y2,z2); }
+  function d(x1,y1,z1,x2,y2,z2) { detail.push(x1,y1,z1,x2,y2,z2); }
+  function g(x1,y1,z1,x2,y2,z2) { depth.push(x1,y1,z1,x2,y2,z2); }
+  const mh = (x1,x2,y,z) => m(x1,y,z, x2,y,z);
+  const mv = (x,y1,y2,z) => m(x,y1,z, x,y2,z);
+  const dh = (x1,x2,y,z) => d(x1,y,z, x2,y,z);
+  const dv = (x,y1,y2,z) => d(x,y1,z, x,y2,z);
+  const GND = -10;
+
+  // ─── MAHANAKHON ─────────────────────────────────────────────────────
+  // Прямоугольная башня с пиксельными вырезами по диагонали
+  ;(function () {
+    const ox = -2.5, oy = GND, oz = -3, W = 5, H = 18;
+    const FL = 36, fh = H / FL;
+
+    // Основной контур
+    mh(ox, ox+W, oy, oz);
+    mv(ox,    oy, oy+H, oz);
+    mv(ox+W,  oy, oy+H, oz);
+    mh(ox, ox+W, oy+H, oz);
+
+    // Горизонтали этажей
+    for (let i = 1; i < FL; i++) dh(ox, ox+W, oy+fh*i, oz);
+
+    // Пиксельный спиральный вырез (8 прямоугольных блоков по диагонали)
+    for (let i = 0; i < 8; i++) {
+      const t  = i / 7;
+      const bx = ox + W * (0.52 - t * 0.46);
+      const by = oy + H * (0.07 + t * 0.66);
+      const bw = W * 0.50;
+      const bh = fh * 2.8;
+      m(bx,    by,    oz, bx+bw, by,    oz);
+      m(bx+bw, by,    oz, bx+bw, by+bh, oz);
+      m(bx+bw, by+bh, oz, bx,    by+bh, oz);
+      m(bx,    by+bh, oz, bx,    by,    oz);
+    }
+
+    // Смотровая платформа (Crown) — немного уже
+    const cw = W * 0.86, ch = H * 0.044;
+    const cx = ox + (W - cw) / 2;
+    mh(cx, cx+cw, oy+H,    oz);
+    mh(cx, cx+cw, oy+H+ch, oz);
+    mv(cx,    oy+H, oy+H+ch, oz);
+    mv(cx+cw, oy+H, oy+H+ch, oz);
+
+    // Антенна
+    mv(ox+W/2, oy+H+ch, oy+H+ch+1.4, oz);
+  })();
+
+  // ─── WAT ARUN ────────────────────────────────────────────────────────
+  // Центральный пранг + 4 спутника
+  ;(function () {
+    const ox = 10, oy = GND, oz = -5;
+
+    function prang(cx, base, bw, H, rings) {
+      const tip = bw * 0.07, hw = bw / 2;
+      m(cx-hw, base,   oz, cx+hw, base, oz);
+      m(cx-hw, base,   oz, cx-tip/2, base+H, oz);
+      m(cx+hw, base,   oz, cx+tip/2, base+H, oz);
+      mh(cx-tip/2, cx+tip/2, base+H, oz);
+      mv(cx, base+H, base+H+bw*0.4, oz); // шпиль
+      for (let i = 0; i < rings; i++) {
+        const t  = (i + 1) / (rings + 1);
+        const y  = base + H * t;
+        const rw = hw * (1 - t * 0.88) + tip / 2;
+        dh(cx-rw, cx+rw, y, oz);
+      }
+    }
+
+    // Платформы
+    mh(ox-4.8, ox+4.8, oy,      oz);
+    mv(ox-4.8, oy, oy+0.55, oz); mv(ox+4.8, oy, oy+0.55, oz);
+    mh(ox-4.8, ox+4.8, oy+0.55, oz);
+    mh(ox-3.2, ox+3.2, oy+0.55, oz);
+    mv(ox-3.2, oy+0.55, oy+1.1, oz); mv(ox+3.2, oy+0.55, oy+1.1, oz);
+    mh(ox-3.2, ox+3.2, oy+1.1,  oz);
+
+    // Главный пранг
+    prang(ox, oy+1.1, 4.2, 15, 20);
+    // Спутники
+    prang(ox-3.6, oy+0.55, 1.5, 5.5, 7);
+    prang(ox+3.6, oy+0.55, 1.5, 5.5, 7);
+    prang(ox-2.1, oy+0.55, 1.1, 4.0, 5);
+    prang(ox+2.1, oy+0.55, 1.1, 4.0, 5);
+  })();
+
+  // ─── ВАТ / ХРАМ С МНОГОЯРУСНОЙ КРЫШЕЙ ───────────────────────────────
+  ;(function () {
+    const ox = -17, oy = GND, oz = -7;
+
+    // Зал — прямоугольник с колоннами
+    mh(ox, ox+9, oy, oz);
+    mv(ox,   oy, oy+2.2, oz);
+    mv(ox+9, oy, oy+2.2, oz);
+    for (let i = 1; i <= 5; i++) dv(ox+i*9/6, oy, oy+2.0, oz);
+
+    function thaiRoof(rx, ry, rw, rh, sw) {
+      const cx = rx + rw / 2;
+      m(rx-sw*0.5, ry, oz, cx, ry+rh, oz);      // левый скат
+      m(rx+rw+sw*0.5, ry, oz, cx, ry+rh, oz);   // правый скат
+      mh(rx-sw, rx+rw+sw, ry, oz);               // карниз
+      // Загнутые концы (чофа)
+      m(rx-sw, ry, oz, rx-sw*0.25, ry-sw*0.65, oz);
+      m(rx+rw+sw, ry, oz, rx+rw+sw*0.25, ry-sw*0.65, oz);
+    }
+
+    thaiRoof(ox-0.6, oy+2.2, 10.2, 2.8, 0.75);
+    thaiRoof(ox+1.0, oy+4.5, 7.0,  2.3, 0.60);
+    thaiRoof(ox+2.4, oy+6.3, 4.2,  2.0, 0.45);
+    thaiRoof(ox+3.5, oy+7.8, 2.0,  1.6, 0.30);
+
+    // Шпиль
+    const sx = ox + 4.5;
+    mv(sx, oy+9.4, oy+11.5, oz);
+    m(sx-0.2, oy+10.6, oz, sx, oy+11.7, oz);
+    m(sx+0.2, oy+10.6, oz, sx, oy+11.7, oz);
+
+    // Нага-финиалы на концах карниза
+    m(ox-0.6, oy+2.2, oz, ox-1.2, oy+1.3, oz);
+    m(ox+9.6, oy+2.2, oz, ox+10.2, oy+1.3, oz);
+  })();
+
+  // ─── ЧЕДИ / СТУПА ───────────────────────────────────────────────────
+  ;(function () {
+    const cx = 22, oy = GND, oz = -12;
+
+    // Платформы
+    mh(cx-3, cx+3, oy, oz);
+    mv(cx-3, oy, oy+0.5, oz); mv(cx+3, oy, oy+0.5, oz);
+    mh(cx-3, cx+3, oy+0.5, oz);
+    mh(cx-2, cx+2, oy+0.5, oz);
+    mv(cx-2, oy+0.5, oy+1.0, oz); mv(cx+2, oy+0.5, oy+1.0, oz);
+    mh(cx-2, cx+2, oy+1.0, oz);
+
+    // Профиль колокола — точки [halfWidth, y]
+    const prof = [
+      [1.8, oy+1.0], [1.95,oy+2.0], [1.7, oy+3.5],
+      [1.2, oy+5.2], [0.7, oy+6.6], [0.5, oy+7.5],
+      [0.35,oy+8.4], [0.2, oy+9.8], [0.06,oy+12.0],
+    ];
+    for (let i = 0; i < prof.length - 1; i++) {
+      m(cx-prof[i][0], prof[i][1], oz, cx-prof[i+1][0], prof[i+1][1], oz);
+      m(cx+prof[i][0], prof[i][1], oz, cx+prof[i+1][0], prof[i+1][1], oz);
+      dh(cx-prof[i][0], cx+prof[i][0], prof[i][1], oz);
+    }
+    mv(cx, oy+12.0, oy+14.2, oz); // шпиль
+  })();
+
+  // ─── ВТОРОЙ ПРАНГ / МАЛЕНЬКИЙ ХРАМ (фон левый) ─────────────────────
+  ;(function () {
+    const cx = -26, oy = GND, oz = -10;
+    const H = 10, bw = 2.8, tip = bw * 0.06, hw = bw / 2;
+
+    mh(cx-3.5, cx+3.5, oy, oz);
+    mv(cx-3.5, oy, oy+0.6, oz); mv(cx+3.5, oy, oy+0.6, oz);
+    mh(cx-3.5, cx+3.5, oy+0.6, oz);
+
+    m(cx-hw, oy+0.6, oz, cx+hw, oy+0.6, oz);
+    m(cx-hw, oy+0.6, oz, cx-tip/2, oy+0.6+H, oz);
+    m(cx+hw, oy+0.6, oz, cx+tip/2, oy+0.6+H, oz);
+    mh(cx-tip/2, cx+tip/2, oy+0.6+H, oz);
+    mv(cx, oy+0.6+H, oy+0.6+H+bw*0.35, oz);
+    for (let i = 0; i < 12; i++) {
+      const t  = (i+1)/13, y = oy+0.6 + H*t;
+      const rw = hw*(1-t*0.87)+tip/2;
+      dh(cx-rw, cx+rw, y, oz);
+    }
+
+    // Два маленьких спутника
+    [-2.0, 2.0].forEach(dx => {
+      const sh = 4, sbw = 1.0, stip = sbw*0.08, shw = sbw/2;
+      m(cx+dx-shw, oy+0.6, oz, cx+dx+shw, oy+0.6, oz);
+      m(cx+dx-shw, oy+0.6, oz, cx+dx-stip/2, oy+0.6+sh, oz);
+      m(cx+dx+shw, oy+0.6, oz, cx+dx+stip/2, oy+0.6+sh, oz);
+      mh(cx+dx-stip/2, cx+dx+stip/2, oy+0.6+sh, oz);
+      mv(cx+dx, oy+0.6+sh, oy+0.6+sh+shw*0.4, oz);
+      for (let i = 0; i < 6; i++) {
+        const t = (i+1)/7, y = oy+0.6+sh*t;
+        const rw = shw*(1-t*0.87)+stip/2;
+        dh(cx+dx-rw, cx+dx+rw, y, oz);
+      }
+    });
+  })();
+
+  // ─── ГОРОДСКИЕ БЛОКИ — ФОНОВЫЙ ГОРИЗОНТ ─────────────────────────────
+  ;(function () {
+    const blocks = [
+      {x:-35, w:5.5, h:7,  fl:8,  z:-16},
+      {x:-29, w:2.8, h:11, fl:13, z:-14},
+      {x:-22, w:3.5, h:6,  fl:7,  z:-17},
+      {x:-13, w:3.0, h:7,  fl:8,  z:-15},
+      {x:  4, w:3.5, h:5,  fl:6,  z:-16},
+      {x: 16, w:4.0, h:8,  fl:9,  z:-15},
+      {x: 22, w:5.0, h:6,  fl:7,  z:-17},
+      {x: 28, w:3.5, h:9,  fl:10, z:-14},
+    ];
+    blocks.forEach(b => {
+      const gy = GND;
+      mh(b.x, b.x+b.w, gy,      b.z);
+      mv(b.x,          gy, gy+b.h, b.z);
+      mv(b.x+b.w,      gy, gy+b.h, b.z);
+      mh(b.x, b.x+b.w, gy+b.h,  b.z);
+      for (let i = 1; i < b.fl; i++) dh(b.x, b.x+b.w, gy+b.h*i/b.fl, b.z);
+    });
+  })();
+
+  // ─── ЗЕМЛЯ И ПЕРСПЕКТИВНЫЕ ЛИНИИ ─────────────────────────────────────
+  ;(function () {
+    // Горизонтальные линии почвы
+    for (let z = -4; z >= -35; z -= 3.5) g(-50, 50, GND, z);
+    // Линии схода в перспективе
+    for (let i = -6; i <= 6; i++) {
+      const x = i * 7;
+      g(x, GND, 2, x * 2.4, GND, -38);
+    }
+    // Несколько вертикальных колонн воздуха
+    for (let i = -4; i <= 4; i++) {
+      const x = i * 10;
+      g(x, GND, -5, x, GND + 20, -5);
+    }
+  })();
+
+  // Создание объектов Three.js
+  function makeSet(pts, opacity) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+    return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+      color: 0x1c1510, transparent: true, opacity,
+    }));
+  }
+
+  return [
+    makeSet(main,   0.20),
+    makeSet(detail, 0.09),
+    makeSet(depth,  0.06),
+  ];
 }
-applyGalleryLang();
-window.addEventListener('langchange', applyGalleryLang);
-I18N.addToggle('dark');
+
+const archGroup = new THREE.Group();
+buildBangkok().forEach(ls => archGroup.add(ls));
+scene.add(archGroup);
+
+// Движение камеры за мышью
+const mouse  = new THREE.Vector2();
+const target = new THREE.Vector2();
+window.addEventListener('mousemove', e => {
+  target.x =  (e.clientX / innerWidth  - 0.5) * 2;
+  target.y = -(e.clientY / innerHeight - 0.5) * 2;
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  mouse.x += (target.x - mouse.x) * 0.025;
+  mouse.y += (target.y - mouse.y) * 0.025;
+
+  camera.position.x  =  mouse.x * 1.6;
+  camera.position.y  =  mouse.y * 0.9;
+  camera.position.z  = 18 + Math.sin(t * 0.06) * 0.8;
+  camera.lookAt(0, -1, 0);
+
+  // Очень медленное вращение — как ветер над городом
+  archGroup.rotation.y = Math.sin(t * 0.014) * 0.06;
+
+  renderer.render(scene, camera);
+}
+animate();
 </script>
-<script type="module" src="js/main.js"></script>
 </body>
 </html>

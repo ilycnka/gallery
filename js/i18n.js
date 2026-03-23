@@ -9,7 +9,8 @@
       hint_rotate:     'перетащи чтобы вращать',
       hint_zoom:       'скролл чтобы приблизить',
       hint_open:       'приблизь чтобы открыть',
-      zoom_hint:       'скролл чтобы перейти',
+      zoom_hint:        'скролл чтобы перейти',
+      enter_collection: 'перейти в коллекцию',
       gallery_title:   'Галерея',
       gallery_sub:     '3D пространство',
       hint_desktop:    'скролл — скорость · нажмите на работу · двигайте мышь',
@@ -33,7 +34,8 @@
       hint_rotate:     'drag to rotate',
       hint_zoom:       'scroll to zoom',
       hint_open:       'zoom to open',
-      zoom_hint:       'scroll to enter',
+      zoom_hint:        'scroll to enter',
+      enter_collection: 'open collection',
       gallery_title:   'Gallery',
       gallery_sub:     '3D space',
       hint_desktop:    'scroll — speed · click artwork · move mouse',
@@ -81,8 +83,8 @@
     // Добавляет кнопку переключения; theme: 'light' | 'dark'
     addToggle(theme) {
       const dark = theme === 'dark';
-      const colorBase  = dark ? 'rgba(100,140,180,0.45)' : 'rgba(0,0,0,0.22)';
-      const colorHover = dark ? 'rgba(150,195,235,0.9)'  : 'rgba(0,0,0,0.55)';
+      const colorBase  = dark ? 'rgba(255,255,255,0.32)' : 'rgba(0,0,0,0.22)';
+      const colorHover = dark ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.55)';
       const btn = document.createElement('button');
       btn.id = 'lang-toggle';
       btn.style.cssText = [
@@ -102,7 +104,7 @@
       window.addEventListener('langchange', render);
       btn.addEventListener('click', () => window.I18N.toggle());
       btn.addEventListener('mouseenter', () => { btn.style.color = colorHover; });
-      btn.addEventListener('mouseleave', () => { btn.style.color = colorBase; });
+      btn.addEventListener('mouseleave', () => { btn.style.color = colorBase;  });
       document.body.appendChild(btn);
     },
   };
