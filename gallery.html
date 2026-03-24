@@ -136,16 +136,18 @@ scene.add(new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({
 
 // ─── Заглушки на линиях сетки ────────────────────────────────────────
 // Позиции привязаны к узлам сетки (DX=3, DY=2.5, DZ=3)
+// mpos  — позиция на мобильном (две колонны коридора)
+// mry   — поворот на мобильном: левая стена +0.28, правая -0.28
 const WORKS = [
-  { pos: [-10,  0,    1],  mpos: [ 0.5,  1.0,   1  ], ry: 0, w: 2.2, h: 3.2, src: 'assets/images/trees-and-glass.jpg', title: 'Trees and Glass',  meta: 'Pencil on paper · 2026' },
-  { pos: [  5,  2.5,  0],  mpos: [-0.5, -1.0,  -1  ], ry: 0, w: 2.0, h: 2.8, src: 'assets/images/downtown.jpg',        title: 'Downtown',         meta: 'Pencil on paper · 2026' },
-  { pos: [ -4, -2.5, -2],  mpos: [ 0.5,  1.0,  -2.5], ry: 0, w: 2.4, h: 3.4, src: 'assets/images/rooftop-view.jpg',    title: 'Rooftop View',     meta: 'Pencil on paper · 2026' },
-  { pos: [ 11,  0,   -2],  mpos: [-0.5, -1.0,  -4  ], ry: 0, w: 2.2, h: 3.0, src: 'assets/images/the-shop.jpg',        title: 'The Shop',         meta: 'Pencil on paper · 2026' },
-  { pos: [ -7,  2.5, -5],  mpos: [ 0.5,  1.0,  -5.5], ry: 0, w: 2.0, h: 2.6, src: 'assets/images/banyan-street.jpg',   title: 'Banyan Street',    meta: 'Pencil on paper · 2026' },
-  { pos: [  2, -2.5, -5],  mpos: [-0.5, -1.0,  -7  ], ry: 0, w: 2.4, h: 3.2, src: 'assets/images/tower-riverside.jpg', title: 'Tower Riverside',  meta: 'Pencil on paper · 2026' },
-  { pos: [-13,  0,   -8],  mpos: [ 0.5,  1.0,  -8.5], ry: 0, w: 2.2, h: 3.0, src: 'assets/images/cafe-window.jpg',     title: 'Cafe Window',      meta: 'Pencil on paper · 2026' },
-  { pos: [  0,  2.5, -8],  mpos: [-0.5, -1.0, -10  ], ry: 0, w: 2.0, h: 2.8, src: 'assets/images/mahanakhon.jpg',      title: 'MahaNakhon',       meta: 'Pencil on paper · 2026' },
-  { pos: [  8, -2.5, -11], mpos: [ 0.5,  1.0, -11.5], ry: 0, w: 2.2, h: 3.2, src: 'assets/images/temple.jpg',          title: 'Temple',           meta: 'Pencil on paper · 2026' },
+  { pos: [-10,  0,    1],  mpos: [-2.5,  0.3,   1  ], ry: 0, mry:  0.28, w: 2.2, h: 3.2, src: 'assets/images/trees-and-glass.jpg', title: 'Trees and Glass',  meta: 'Pencil on paper · 2026' },
+  { pos: [  5,  2.5,  0],  mpos: [ 2.5, -0.2,  -1.5], ry: 0, mry: -0.28, w: 2.0, h: 2.8, src: 'assets/images/downtown.jpg',        title: 'Downtown',         meta: 'Pencil on paper · 2026' },
+  { pos: [ -4, -2.5, -2],  mpos: [-2.5,  0.5,  -3.5], ry: 0, mry:  0.28, w: 2.4, h: 3.4, src: 'assets/images/rooftop-view.jpg',    title: 'Rooftop View',     meta: 'Pencil on paper · 2026' },
+  { pos: [ 11,  0,   -2],  mpos: [ 2.5,  0.1,  -5  ], ry: 0, mry: -0.28, w: 2.2, h: 3.0, src: 'assets/images/the-shop.jpg',        title: 'The Shop',         meta: 'Pencil on paper · 2026' },
+  { pos: [ -7,  2.5, -5],  mpos: [-2.5, -0.3,  -7  ], ry: 0, mry:  0.28, w: 2.0, h: 2.6, src: 'assets/images/banyan-street.jpg',   title: 'Banyan Street',    meta: 'Pencil on paper · 2026' },
+  { pos: [  2, -2.5, -5],  mpos: [ 2.5,  0.4,  -9  ], ry: 0, mry: -0.28, w: 2.4, h: 3.2, src: 'assets/images/tower-riverside.jpg', title: 'Tower Riverside',  meta: 'Pencil on paper · 2026' },
+  { pos: [-13,  0,   -8],  mpos: [-2.5,  0.2, -11  ], ry: 0, mry:  0.28, w: 2.2, h: 3.0, src: 'assets/images/cafe-window.jpg',     title: 'Cafe Window',      meta: 'Pencil on paper · 2026' },
+  { pos: [  0,  2.5, -8],  mpos: [ 2.5, -0.1, -12.5], ry: 0, mry: -0.28, w: 2.0, h: 2.8, src: 'assets/images/mahanakhon.jpg',      title: 'MahaNakhon',       meta: 'Pencil on paper · 2026' },
+  { pos: [  8, -2.5, -11], mpos: [-2.5,  0.3, -14.5], ry: 0, mry:  0.28, w: 2.2, h: 3.2, src: 'assets/images/temple.jpg',          title: 'Temple',           meta: 'Pencil on paper · 2026' },
 ];
 
 const texLoader = new THREE.TextureLoader();
@@ -154,12 +156,13 @@ const frameMat = new THREE.LineBasicMaterial({ color: 0x1c1814, transparent: tru
 const workMeshes = []; // для рейкастера
 
 WORKS.forEach((work, i) => {
-  const { pos, mpos, ry, w, h, src } = work;
-  const p3 = isMobile ? mpos : pos; // позиция в зависимости от устройства
+  const { pos, mpos, ry, mry, w, h, src } = work;
+  const p3       = isMobile ? mpos : pos;
+  const rotation = isMobile ? mry  : ry;
   const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   mesh.position.set(...p3);
-  mesh.rotation.y = ry;
+  mesh.rotation.y = rotation;
   mesh.userData.workIndex = i;
   scene.add(mesh);
   workMeshes.push(mesh);
@@ -176,7 +179,7 @@ WORKS.forEach((work, i) => {
   ]), 3));
   const frame = new THREE.LineLoop(frameGeo, frameMat);
   frame.position.set(...p3);
-  frame.rotation.y = ry;
+  frame.rotation.y = rotation;
   scene.add(frame);
 });
 
@@ -500,7 +503,7 @@ let titleMesh;
 // ─── Камера + мышь + скролл ──────────────────────────────────────────
 const mouse  = new THREE.Vector2();
 const target = new THREE.Vector2();
-const SCROLL_MIN = isMobile ? 6  : 10;
+const SCROLL_MIN = isMobile ? 4  : 10;
 const SCROLL_MAX = isMobile ? 22 : 17;
 let scrollZ = 14, scrollZTarget = 14;
 
