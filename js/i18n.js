@@ -17,14 +17,18 @@
       hint_mobile:     'касайтесь работ · наклоняйте телефон · слайдер — скорость',
       speed_label:     'Скорость',
       art_desc:        'Оригинальная работа. При покупке вы становитесь единственным владельцем — ваше имя отображается на произведении в галерее.',
-      btn_acquire:     'ПРИОБРЕСТИ',
-      btn_owned:       'В КОЛЛЕКЦИИ',
-      btn_processing:  'ОФОРМЛЕНИЕ...',
-      btn_bought:      '✓ ТЕПЕРЬ ЭТО ВАШЕ',
+      btn_acquire:     'приобрести',
+      btn_owned:       'в коллекции',
+      btn_processing:  'оформление...',
+      btn_bought:      '✓ теперь это ваше',
       owner_prefix:    'Владелец: ',
       owner_you:       'Вы',
       back_gallery:    '← назад в галерею',
       works_available: (n) => `${n} работ доступно`,
+      coming_soon:     'Скоро',
+      coming_not_soon: 'Не скоро',
+      nav_about:       'о проекте',
+      nav_acquire:     'поддержать проект',
     },
     en: {
       nav_collections: 'select collection',
@@ -42,14 +46,18 @@
       hint_mobile:     'tap artworks · tilt phone · slider — speed',
       speed_label:     'Speed',
       art_desc:        'Original artwork. Upon purchase you become the sole owner — your name is displayed on the work in the gallery.',
-      btn_acquire:     'ACQUIRE',
-      btn_owned:       'IN COLLECTION',
-      btn_processing:  'PROCESSING...',
-      btn_bought:      '✓ NOW THIS IS YOURS',
+      btn_acquire:     'acquire',
+      btn_owned:       'in collection',
+      btn_processing:  'processing...',
+      btn_bought:      '✓ now this is yours',
       owner_prefix:    'Owner: ',
       owner_you:       'You',
       back_gallery:    '← back to gallery',
       works_available: (n) => `${n} works available`,
+      coming_soon:     'coming soon',
+      coming_not_soon: 'coming not soon',
+      nav_about:       'about',
+      nav_acquire:     'support the project',
     },
   };
 
@@ -96,9 +104,9 @@
       ].join(';');
 
       function render() {
-        btn.innerHTML = _lang === 'ru'
-          ? '<span>ru</span> · <span style="opacity:0.4">en</span>'
-          : '<span style="opacity:0.4">ru</span> · <span>en</span>';
+        btn.innerHTML = _lang === 'en'
+          ? '<span>en</span> · <span style="opacity:0.4">ru</span>'
+          : '<span style="opacity:0.4">en</span> · <span>ru</span>';
       }
       render();
       window.addEventListener('langchange', render);

@@ -65,11 +65,41 @@
     }
     #popup-close {
       position: absolute; top: 14px; right: 18px;
-      background: none; border: none; cursor: pointer;
-      font-size: 18px; color: rgba(28,24,20,0.30);
+      background: rgba(255,255,255,0.85); border: none; cursor: pointer;
+      font-size: 18px; color: rgba(28,24,20,0.50);
       line-height: 1; transition: color 0.2s;
+      z-index: 1; border-radius: 50%;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
     }
     #popup-close:hover { color: rgba(28,24,20,0.75); }
+
+    /* ── Плашка текущей работы ── */
+    #info-panel {
+      position: fixed;
+      bottom: 56px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      background: none;
+      padding: 16px 48px 14px;
+      text-align: center;
+      pointer-events: none;
+      white-space: nowrap;
+      transition: opacity 0.3s ease;
+    }
+    #info-title {
+      font-size: 13px; font-weight: 300;
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgba(28,24,20,0.70);
+    }
+    #info-sale {
+      font-size: 10px; font-weight: 300;
+      letter-spacing: 0.24em; text-transform: uppercase;
+      color: rgb(110,18,18);
+      margin-top: 7px;
+    }
+
     @media (max-width: 480px) {
       #popup-card { padding: 24px 20px 20px; gap: 10px; }
       #popup-title { font-size: 11px; }
@@ -81,13 +111,18 @@
 <canvas id="bg"></canvas>
 <a id="back" href="collections.html">← back</a>
 
+<div id="info-panel">
+  <div id="info-title"></div>
+  <div id="info-sale">on sale</div>
+</div>
+
 <div id="popup">
   <div id="popup-card">
     <button id="popup-close">×</button>
     <img id="popup-img" src="" alt="" />
     <div id="popup-title"></div>
     <div id="popup-meta"></div>
-    <div id="popup-sale">on sale (donation)</div>
+    <div id="popup-sale">on sale</div>
   </div>
 </div>
 
@@ -110,7 +145,7 @@ camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(isMobile ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setClearColor(0xffffff, 1);
 
 // ─── Объёмная решётка ────────────────────────────────────────────────
@@ -136,39 +171,40 @@ scene.add(new THREE.LineSegments(gridGeo, new THREE.LineBasicMaterial({
 
 // ─── Заглушки на линиях сетки ────────────────────────────────────────
 // Позиции привязаны к узлам сетки (DX=3, DY=2.5, DZ=3)
-// mpos  — позиция на мобильном (две колонны коридора)
-// mry   — поворот на мобильном: левая стена +0.28, правая -0.28
 const WORKS = [
-  { pos: [-10,  0,    1],  mpos: [-2.5,  0.3,   1  ], ry: 0, mry:  0.28, w: 2.2, h: 3.2, src: 'assets/images/trees-and-glass.jpg', title: 'Trees and Glass',  meta: 'Pencil on paper · 2026' },
-  { pos: [  5,  2.5,  0],  mpos: [ 2.5, -0.2,  -1.5], ry: 0, mry: -0.28, w: 2.0, h: 2.8, src: 'assets/images/downtown.jpg',        title: 'Downtown',         meta: 'Pencil on paper · 2026' },
-  { pos: [ -4, -2.5, -2],  mpos: [-2.5,  0.5,  -3.5], ry: 0, mry:  0.28, w: 2.4, h: 3.4, src: 'assets/images/rooftop-view.jpg',    title: 'Rooftop View',     meta: 'Pencil on paper · 2026' },
-  { pos: [ 11,  0,   -2],  mpos: [ 2.5,  0.1,  -5  ], ry: 0, mry: -0.28, w: 2.2, h: 3.0, src: 'assets/images/the-shop.jpg',        title: 'The Shop',         meta: 'Pencil on paper · 2026' },
-  { pos: [ -7,  2.5, -5],  mpos: [-2.5, -0.3,  -7  ], ry: 0, mry:  0.28, w: 2.0, h: 2.6, src: 'assets/images/banyan-street.jpg',   title: 'Banyan Street',    meta: 'Pencil on paper · 2026' },
-  { pos: [  2, -2.5, -5],  mpos: [ 2.5,  0.4,  -9  ], ry: 0, mry: -0.28, w: 2.4, h: 3.2, src: 'assets/images/tower-riverside.jpg', title: 'Tower Riverside',  meta: 'Pencil on paper · 2026' },
-  { pos: [-13,  0,   -8],  mpos: [-2.5,  0.2, -11  ], ry: 0, mry:  0.28, w: 2.2, h: 3.0, src: 'assets/images/cafe-window.jpg',     title: 'Cafe Window',      meta: 'Pencil on paper · 2026' },
-  { pos: [  0,  2.5, -8],  mpos: [ 2.5, -0.1, -12.5], ry: 0, mry: -0.28, w: 2.0, h: 2.8, src: 'assets/images/mahanakhon.jpg',      title: 'MahaNakhon',       meta: 'Pencil on paper · 2026' },
-  { pos: [  8, -2.5, -11], mpos: [-2.5,  0.3, -14.5], ry: 0, mry:  0.28, w: 2.2, h: 3.2, src: 'assets/images/temple.jpg',          title: 'Temple',           meta: 'Pencil on paper · 2026' },
+  { w: 2.2, h: 3.2, src: 'assets/images/trees-and-glass.jpg', title: 'Trees and Glass',  meta: 'Pencil on paper · 2026' },
+  { w: 2.0, h: 2.8, src: 'assets/images/downtown.jpg',        title: 'Downtown',         meta: 'Pencil on paper · 2026' },
+  { w: 2.4, h: 3.4, src: 'assets/images/rooftop-view.jpg',    title: 'Rooftop View',     meta: 'Pencil on paper · 2026' },
+  { w: 2.2, h: 3.0, src: 'assets/images/the-shop.jpg',        title: 'The Shop',         meta: 'Pencil on paper · 2026' },
+  { w: 2.0, h: 2.6, src: 'assets/images/banyan-street.jpg',   title: 'Banyan Street',    meta: 'Pencil on paper · 2026' },
+  { w: 2.4, h: 3.2, src: 'assets/images/tower-riverside.jpg', title: 'Tower Riverside',  meta: 'Pencil on paper · 2026' },
+  { w: 2.2, h: 3.0, src: 'assets/images/cafe-window.jpg',     title: 'Cafe Window',      meta: 'Pencil on paper · 2026' },
+  { w: 2.0, h: 2.8, src: 'assets/images/mahanakhon.jpg',      title: 'MahaNakhon',       meta: 'Pencil on paper · 2026' },
+  { w: 2.2, h: 3.2, src: 'assets/images/temple.jpg',          title: 'Temple',           meta: 'Pencil on paper · 2026', owner: 'Anfisa Lapteva' },
 ];
+const N = WORKS.length;
+const R_CAROUSEL = 3.8; // радиус невидимого горизонтального круга
+const Z_CAROUSEL = -2.0; // смещение карусели (отрицательное — дальше от камеры)
 
 const texLoader = new THREE.TextureLoader();
 const frameMat = new THREE.LineBasicMaterial({ color: 0x1c1814, transparent: true, opacity: 0.22 });
 
-const workMeshes = []; // для рейкастера
+const workMeshes  = [];
+const frameMeshes = [];
 
 WORKS.forEach((work, i) => {
-  const { pos, mpos, ry, mry, w, h, src } = work;
-  const p3       = isMobile ? mpos : pos;
-  const rotation = isMobile ? mry  : ry;
+  const { w, h, src } = work;
+  const a0 = (2 * Math.PI * i) / N;
+
   const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-  mesh.position.set(...p3);
-  mesh.rotation.y = rotation;
+  mesh.position.set(R_CAROUSEL * Math.sin(a0), 0.7, R_CAROUSEL * Math.cos(a0) - R_CAROUSEL + Z_CAROUSEL);
+  mesh.rotation.y = -a0;
   mesh.userData.workIndex = i;
   scene.add(mesh);
   workMeshes.push(mesh);
   texLoader.load(src, tex => { mat.map = tex; mat.needsUpdate = true; });
 
-  // Тонкая рамка
   const fp = 0.05;
   const frameGeo = new THREE.BufferGeometry();
   frameGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
@@ -178,9 +214,10 @@ WORKS.forEach((work, i) => {
     -w/2 - fp,  h/2 + fp, 0,
   ]), 3));
   const frame = new THREE.LineLoop(frameGeo, frameMat);
-  frame.position.set(...p3);
-  frame.rotation.y = rotation;
+  frame.position.copy(mesh.position);
+  frame.rotation.y = mesh.rotation.y;
   scene.add(frame);
+  frameMeshes.push(frame);
 });
 
 // ─── Попап ───────────────────────────────────────────────────────────
@@ -194,6 +231,7 @@ function openPopup(work) {
   popupImg.alt     = work.title;
   popupTitle.textContent = work.title;
   popupMeta.textContent  = work.meta;
+  document.getElementById('popup-sale').textContent = work.owner ? work.owner : 'on sale';
   popup.classList.add('open');
 }
 function closePopup() { popup.classList.remove('open'); }
@@ -289,8 +327,10 @@ window.addEventListener('touchend', e => {
 
   // Ряды кварталов (zFront — ближняя стена, zBack — дальняя)
   const blockRows = isMobile ? [
-    { zFront: -0.5, zBack: -3.2 },
-    { zFront: -5.0, zBack: -8.0 },
+    { zFront:  -0.5, zBack:  -3.2 },
+    { zFront:  -5.0, zBack:  -8.0 },
+    { zFront: -10.5, zBack: -13.5 },
+    { zFront: -16.0, zBack: -19.0 },
   ] : [
     { zFront: -0.5, zBack: -3.2 },
     { zFront: -5.0, zBack: -8.0 },
@@ -439,7 +479,7 @@ let titleMesh;
     new THREE.PlaneGeometry(pw, ph),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
   );
-  titleMesh.position.set(1, 7.5, -16);
+  titleMesh.position.set(0, 7.5, -16);
   scene.add(titleMesh);
 })();
 
@@ -500,12 +540,12 @@ let titleMesh;
   window.addEventListener('touchstart', startAudio, { once: true, passive: true });
 })();
 
-// ─── Камера + мышь + скролл ──────────────────────────────────────────
+// ─── Камера + мышь + стопка ──────────────────────────────────────────
 const mouse  = new THREE.Vector2();
 const target = new THREE.Vector2();
-const SCROLL_MIN = isMobile ? 4  : 10;
-const SCROLL_MAX = isMobile ? 22 : 17;
-let scrollZ = 14, scrollZTarget = 14;
+
+// Текущий индекс активной работы (float для плавности)
+let stackT = 0, stackTTarget = 0;
 
 window.addEventListener('mousemove', e => {
   target.x =  (e.clientX / innerWidth  - 0.5) * 2;
@@ -517,16 +557,16 @@ window.addEventListener('mousemove', e => {
 });
 
 window.addEventListener('wheel', e => {
-  scrollZTarget = Math.max(SCROLL_MIN, Math.min(SCROLL_MAX, scrollZTarget - e.deltaY * 0.008));
+  stackTTarget += e.deltaY * 0.005;
 }, { passive: true });
 
-// Touch-скролл: свайп вверх — вперёд, вниз — назад
+// Свайп вверх — следующая работа, вниз — предыдущая
 let _touchScrollY = null;
 window.addEventListener('touchmove', e => {
   if (popup.classList.contains('open')) return;
   if (_touchScrollY === null) { _touchScrollY = e.touches[0].clientY; return; }
   const dy = _touchScrollY - e.touches[0].clientY;
-  scrollZTarget = Math.max(SCROLL_MIN, Math.min(SCROLL_MAX, scrollZTarget - dy * 0.012));
+  stackTTarget += dy * 0.01;
   _touchScrollY = e.touches[0].clientY;
 }, { passive: true });
 window.addEventListener('touchend', () => { _touchScrollY = null; }, { passive: true });
@@ -560,19 +600,52 @@ window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
+const infoTitle = document.getElementById('info-title');
+let _lastFrontIdx = -1;
+
 const clock = new THREE.Clock();
 (function animate() {
   requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
   mouse.x += (target.x - mouse.x) * 0.025;
   mouse.y += (target.y - mouse.y) * 0.025;
-  scrollZ += (scrollZTarget - scrollZ) * 0.07;
+
+  // Вращение карусели
+  stackT += (stackTTarget - stackT) * 0.08;
+  const frontIdx = ((Math.round(stackT) % N) + N) % N;
+  if (frontIdx !== _lastFrontIdx) {
+    _lastFrontIdx = frontIdx;
+    infoTitle.textContent = WORKS[frontIdx].title;
+    const sale = document.getElementById('info-sale');
+    const w = WORKS[frontIdx];
+    sale.textContent = w.owner ? w.owner : 'on sale';
+  }
+  const carouselAngle = stackT * (2 * Math.PI / N);
+
+  workMeshes.forEach((mesh, i) => {
+    const a = (2 * Math.PI * i / N) - carouselAngle;
+    const tx  = R_CAROUSEL * Math.sin(a);
+    const tz  = R_CAROUSEL * Math.cos(a) - R_CAROUSEL + Z_CAROUSEL;
+    const tRy = -a;
+    // Выброс вперёд для ближайшей к камере работы
+    const frontness = Math.cos(a); // 1 = спереди, -1 = сзади
+    const popZ = Math.max(0, frontness - 0.5) * 10;
+    const k = 0.1;
+    mesh.position.x += (tx       - mesh.position.x) * k;
+    mesh.position.y += (0.7      - mesh.position.y) * k;
+    mesh.position.z += (tz + popZ - mesh.position.z) * k;
+    mesh.rotation.y += (tRy      - mesh.rotation.y) * k;
+    frameMeshes[i].position.copy(mesh.position);
+    frameMeshes[i].rotation.y = mesh.rotation.y;
+  });
+
   camera.position.x = mouse.x * 2.38;
   camera.position.y = 2 + mouse.y * 1.32;
-  camera.position.z = scrollZ + Math.sin(t * 0.07) * 0.5;
+  camera.position.z = 9 + Math.sin(t * 0.07) * 0.4;
   camera.lookAt(0, 0, 0);
+
   titleMesh.position.y = 7.5 + Math.sin(t * 0.28 + 1.1) * 0.18;
-  titleMesh.position.x = 1   + Math.sin(t * 0.17 + 0.4) * 0.08;
+  titleMesh.position.x =       Math.sin(t * 0.17 + 0.4) * 0.08;
   updateCars();
   renderer.render(scene, camera);
 })();

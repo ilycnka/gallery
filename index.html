@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>VoidWall</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -15,14 +17,6 @@
       font-family: 'Segoe UI', sans-serif;
     }
     canvas { display: block; }
-
-    #lang-hint {
-      position: fixed; top: 46px; right: 22px; z-index: 199;
-      font-size: 11px; color: rgba(0,0,0,0.28); letter-spacing: 0.10em;
-      white-space: nowrap; pointer-events: none; text-align: right;
-      opacity: 0; transition: opacity 0.6s ease;
-    }
-    #lang-hint.show { opacity: 1; }
 
     #logo {
       position: fixed;
@@ -42,26 +36,12 @@
 <body>
 
 <div id="logo">VoidWall</div>
-<div id="lang-hint">↑ русский язык</div>
 
 <script src="js/i18n.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
 I18N.addToggle('light');
-
-// Подсказка «доступен на русском» — каждый раз при новой сессии
-(function () {
-  const el = document.getElementById('lang-hint');
-  let timer;
-  const dismiss = () => { clearTimeout(timer); el.classList.remove('show'); };
-  setTimeout(() => {
-    if (I18N.lang === 'ru') return; // уже переключили — не нужна
-    el.classList.add('show');
-    timer = setTimeout(dismiss, 6000);
-  }, 1600);
-  window.addEventListener('langchange', dismiss, { once: true });
-})();
 
 // ─── Сцена ───
 const scene = new THREE.Scene();
@@ -83,10 +63,9 @@ const wPos = new Float32Array(PCOUNT * 3);
 for (let i = 0; i < PCOUNT; i++) {
   wPos[i*3]   = (Math.random() - 0.5) * 46;
   wPos[i*3+1] = (Math.random() - 0.5) * 30;
-  wPos[i*3+2] = (Math.random() - 0.5) * 30 + 9; // вокруг камеры, тянется вдаль
+  wPos[i*3+2] = (Math.random() - 0.5) * 30 + 9;
 }
 
-// Текстура-шарик: твёрдый круг с мягким краем
 function makeCircleTex() {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -110,79 +89,96 @@ scene.add(new THREE.Points(waveGeo, new THREE.PointsMaterial({
   sizeAttenuation: true, depthWrite: false,
 })));
 
-// ─── Надписи меню ───
-
-function createNavTexture(text, opacity) {
-  const w = 600, h = 88;
+// ─── Текстура надписи ───
+function createNavTexture(text, opacity, w, h) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, w, h);
+  const weight = 100;
+  let size = Math.round(h * 0.38);
+  ctx.font = `${weight} ${size}px Inter, sans-serif`;
+  while (ctx.measureText(text).width > w * 0.92 && size > 8) {
+    size -= 1;
+    ctx.font = `${weight} ${size}px Inter, sans-serif`;
+  }
   ctx.fillStyle = `rgba(0,0,0,${opacity})`;
-  ctx.font = '200 44px Segoe UI, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, w / 2, h / 2);
   return new THREE.CanvasTexture(c);
 }
 
-// offset: позиция относительно камеры
-const NAV = [
-  { i18nKey: 'nav_collections', href: 'collections.html', offset: [0, -0.4, -6.5], ry: 0, floatPhase: 0, floatAmp: 0.07, opacity: 0.42 },
+// ─── Треугольник-навигация ───
+const R = isMobile ? 1.6 : 2.2;  // радиус описанной окружности
+
+// Вершины равностороннего треугольника: верх, нижний-левый, нижний-правый
+const CORNERS = [
+  new THREE.Vector3(0,             R,       0),
+  new THREE.Vector3(-R * 0.866, -R * 0.5,  0),
+  new THREE.Vector3( R * 0.866, -R * 0.5,  0),
 ];
+
+const triGroup = new THREE.Group();
+triGroup.position.z = -2;
+triGroup.rotation.x = Math.random() * Math.PI * 2;
+triGroup.rotation.y = Math.random() * Math.PI * 2;
+scene.add(triGroup);
+
+// Рёбра треугольника
+const edgeGeo = new THREE.BufferGeometry().setFromPoints([
+  CORNERS[0], CORNERS[1], CORNERS[2], CORNERS[0],
+]);
+triGroup.add(new THREE.Line(edgeGeo,
+  new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.18 })));
+
+const NAV = [
+  { i18nKey: 'nav_collections', href: 'collections.html', corner: 0 },
+  { i18nKey: 'nav_about',       href: 'about.html',       corner: 1 },
+  { i18nKey: 'nav_acquire',                               corner: 2 },
+];
+
+const CANVAS_W = 512, CANVAS_H = 64;
+const LABEL_H  = 0.72, LABEL_W = LABEL_H * CANVAS_W / CANVAS_H;
 
 const navMeshes = [];
 NAV.forEach(item => {
-  const tex = createNavTexture(I18N.t(item.i18nKey), item.opacity);
-  const ph = isMobile ? 0.72 : 0.82;
-  const pw = (600 / 88) * ph;
+  const tex  = createNavTexture(I18N.t(item.i18nKey), 0.72, CANVAS_W, CANVAS_H);
   const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(pw, ph),
+    new THREE.PlaneGeometry(LABEL_W, LABEL_H),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
   );
-  scene.add(mesh);
+  // Сдвиг чуть наружу от вершины
+  const v   = CORNERS[item.corner];
+  const dir = v.clone().normalize();
+  mesh.position.copy(v).addScaledVector(dir, 0.42);
+  triGroup.add(mesh);
   navMeshes.push({ mesh, item });
 });
 
-// Перестраиваем текстуры надписей при смене языка
-window.addEventListener('langchange', () => {
+function rebuildNavTextures() {
   navMeshes.forEach(({ mesh, item }) => {
     mesh.material.map.dispose();
-    mesh.material.map = createNavTexture(I18N.t(item.i18nKey), item.opacity);
+    mesh.material.map = createNavTexture(I18N.t(item.i18nKey), 0.72, CANVAS_W, CANVAS_H);
     mesh.material.needsUpdate = true;
   });
-});
-
-// ─── Мышь / гироскоп ───
-const mouse = new THREE.Vector2();
-const targetMouse = new THREE.Vector2();
-
-if (isMobile && window.DeviceOrientationEvent) {
-  let base = null;
-  const handler = (e) => {
-    const a = e.gamma || 0, b = e.beta || 0;
-    if (!base) base = { a, b };
-    targetMouse.x = Math.max(-1, Math.min(1, -(a - base.a) / 20));
-    targetMouse.y = Math.max(-1, Math.min(1, -(b - base.b) / 30));
-  };
-  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-    const btn = document.createElement('button');
-    btn.textContent = I18N.t('gyro_allow');
-    btn.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:300;padding:16px 28px;border-radius:30px;background:#1a1a1a;color:#fff;border:none;font-size:14px;font-family:inherit;cursor:pointer;';
-    document.body.appendChild(btn);
-    btn.addEventListener('click', async () => {
-      try { if ((await DeviceOrientationEvent.requestPermission()) === 'granted') window.addEventListener('deviceorientation', handler, { passive: true }); } catch {}
-      btn.remove();
-    });
-  } else {
-    window.addEventListener('deviceorientation', handler, { passive: true });
-  }
 }
+document.fonts.load('100 44px Inter').then(() => {
+  document.fonts.load('300 44px Inter').then(rebuildNavTextures);
+});
+window.addEventListener('langchange', rebuildNavTextures);
 
-// ─── Клики / тапы ───
-const raycaster = new THREE.Raycaster();
-const _ndc = new THREE.Vector2(); // переиспользуем вместо new на каждый event
-const navMeshList = navMeshes.map(n => n.mesh); // кэш — не аллоцируем на каждый mousemove
+// ─── Вращение треугольника ───
+let isDragging = false;
+let dragPrev   = { x: 0, y: 0 };
+let dragDist   = 0;
+let rotVelX    = 0, rotVelY = 0;
+
+const mouse       = new THREE.Vector2();
+const targetMouse = new THREE.Vector2();
+const raycaster   = new THREE.Raycaster();
+const _ndc        = new THREE.Vector2();
+const navMeshList = navMeshes.map(n => n.mesh);
 
 function toNDC(cx, cy) {
   _ndc.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
@@ -196,27 +192,65 @@ function handleTap(cx, cy) {
   if (nav?.item.href) window.location.href = nav.item.href;
 }
 
-// Один mousemove: и камера, и hover-курсор
-window.addEventListener('mousemove', (e) => {
-  targetMouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
-  targetMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  raycaster.setFromCamera(toNDC(e.clientX, e.clientY), camera);
-  const hit = raycaster.intersectObjects(navMeshList)[0];
-  renderer.domElement.style.cursor = (hit && navMeshes.find(n => n.mesh === hit.object)?.item.href) ? 'pointer' : 'default';
+function dragStart(x, y) {
+  isDragging = true;
+  dragPrev   = { x, y };
+  dragDist   = 0;
+  rotVelX = rotVelY = 0;
+}
+function dragMove(x, y) {
+  if (!isDragging) return;
+  const dx = x - dragPrev.x, dy = y - dragPrev.y;
+  dragDist += Math.sqrt(dx * dx + dy * dy);
+  rotVelY = dx * 0.009;
+  rotVelX = dy * 0.009;
+  triGroup.rotation.y += rotVelY;
+  triGroup.rotation.x += rotVelX;
+  dragPrev = { x, y };
+  targetMouse.x =  (x / window.innerWidth)  * 2 - 1;
+  targetMouse.y = -(y / window.innerHeight) * 2 + 1;
+}
+function dragEnd(cx, cy) {
+  if (dragDist < 8) handleTap(cx, cy);
+  isDragging = false;
+}
+
+// Мышь
+window.addEventListener('mousedown', e => dragStart(e.clientX, e.clientY));
+window.addEventListener('mousemove', e => {
+  if (isDragging) {
+    dragMove(e.clientX, e.clientY);
+  } else {
+    targetMouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+    targetMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(toNDC(e.clientX, e.clientY), camera);
+    const hit = raycaster.intersectObjects(navMeshList)[0];
+    renderer.domElement.style.cursor =
+      (hit && navMeshes.find(n => n.mesh === hit.object)?.item.href) ? 'pointer' : 'default';
+  }
 });
+window.addEventListener('mouseup',   e => dragEnd(e.clientX, e.clientY));
 
-window.addEventListener('click', (e) => { if (!isMobile) handleTap(e.clientX, e.clientY); });
-
-let touchStart = null;
-window.addEventListener('touchstart', (e) => {
-  touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+// Касания
+let touchId = null;
+window.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  touchId = t.identifier;
+  dragStart(t.clientX, t.clientY);
 }, { passive: true });
-window.addEventListener('touchend', (e) => {
-  if (!touchStart) return;
-  const dx = e.changedTouches[0].clientX - touchStart.x;
-  const dy = e.changedTouches[0].clientY - touchStart.y;
-  if (Math.abs(dx) < 10 && Math.abs(dy) < 10) handleTap(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-  touchStart = null;
+window.addEventListener('touchmove', e => {
+  for (const t of e.touches) {
+    if (t.identifier === touchId) { dragMove(t.clientX, t.clientY); break; }
+  }
+}, { passive: true });
+window.addEventListener('touchend', e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchId) {
+      dragEnd(t.clientX, t.clientY);
+      touchId = null;
+      break;
+    }
+  }
 }, { passive: true });
 
 window.addEventListener('resize', () => {
@@ -235,32 +269,35 @@ function animate() {
   mouse.x += (targetMouse.x - mouse.x) * 0.04;
   mouse.y += (targetMouse.y - mouse.y) * 0.04;
 
-  // Лёгкое дыхание вперёд-назад + покачивание
+  // Лёгкое дыхание камеры
   camera.position.z = 9 + Math.sin(t * 0.11) * 3.5;
   camera.position.y =     Math.sin(t * 0.07) * 0.25;
   camera.position.x =     Math.sin(t * 0.09) * 0.15;
+  camera.rotation.y = -mouse.x * 0.05;
+  camera.rotation.x =  mouse.y * 0.04;
 
-  // Реакция на мышь
-  camera.rotation.y = -mouse.x * 0.08;
-  camera.rotation.x =  mouse.y * 0.05;
-
-  // Медленное движение частиц на зрителя по оси Z
+  // Частицы летят на зрителя
   const wp = waveGeo.attributes.position.array;
   for (let i = 0; i < PCOUNT; i++) {
-    wp[i*3+2] += 0.012;
-    if (wp[i*3+2] > 24) wp[i*3+2] -= 36; // телепорт в хвост тоннеля
+    wp[i*3+2] += 0.108;
+    if (wp[i*3+2] > 24) wp[i*3+2] -= 36;
   }
   waveGeo.attributes.position.needsUpdate = true;
 
-  // Парящие надписи — следуют за камерой с фиксированным смещением
-  navMeshes.forEach(({ mesh, item }) => {
-    mesh.position.set(
-      camera.position.x + item.offset[0],
-      camera.position.y + item.offset[1] + Math.sin(t * 0.42 + item.floatPhase) * item.floatAmp,
-      camera.position.z + item.offset[2]
-    );
-    mesh.rotation.y = camera.rotation.y + item.ry;
-  });
+  // Инерция вращения треугольника
+  if (!isDragging) {
+    triGroup.rotation.y += rotVelY;
+    triGroup.rotation.x += rotVelX;
+    rotVelY *= 0.90;
+    rotVelX *= 0.90;
+  }
+
+  // Треугольник следует за камерой
+  triGroup.position.x = camera.position.x;
+  triGroup.position.y = camera.position.y;
+
+  // Надписи всегда смотрят на камеру
+  navMeshes.forEach(({ mesh }) => mesh.lookAt(camera.position));
 
   renderer.render(scene, camera);
 }

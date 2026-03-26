@@ -1,719 +1,317 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Коллекции — VoidWall</title>
+  <title>Collections — VoidWall</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      overflow: hidden; background: #020408;
-      touch-action: none; user-select: none; -webkit-user-select: none;
+      background: #f5f5f5;
       font-family: 'Segoe UI', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
     }
-    canvas { display: block; }
+
     #back {
-      position: fixed; top: 22px; left: 22px; z-index: 50;
-      font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 0.08em;
-      cursor: pointer; text-decoration: none; transition: color 0.2s;
+      position: fixed;
+      top: 22px; left: 22px; z-index: 10;
+      font-size: 11px;
+      color: rgba(0,0,0,0.28);
+      letter-spacing: 0.10em;
+      text-decoration: none;
+      transition: color 0.2s;
     }
-    #back:hover { color: rgba(255,255,255,0.8); }
-    #wordmark {
-      position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
-      font-size: 10px; color: rgba(255,255,255,0.22); letter-spacing: 0.22em; text-transform: uppercase;
-      z-index: 50; pointer-events: none;
-    }
-    #collection-info {
-      position: fixed; top: 0; left: 0;
-      transform: translate(-50%, -50%);
-      z-index: 50; text-align: center; pointer-events: none;
-      opacity: 0; transition: opacity 0.4s ease;
-    }
-    #collection-info.show { opacity: 1; }
-    #collection-name {
-      font-size: 11px; letter-spacing: 0.30em; text-transform: uppercase;
-      color: #080e18;
-    }
-    #enter-btn {
-      display: block; margin-top: 16px;
-      padding: 9px 22px;
-      background: rgba(8,14,28,0.78);
-      border: 1px solid rgba(80,140,220,0.32);
-      border-radius: 22px;
-      font-family: inherit; font-size: 9px;
-      letter-spacing: 0.22em; text-transform: uppercase;
-      color: #7ab0d8; cursor: pointer;
-      pointer-events: auto;
-      backdrop-filter: blur(8px);
-      opacity: 0; transition: opacity 0.4s ease, background 0.2s, color 0.2s;
-    }
-    #enter-btn.show { opacity: 1; }
-    #enter-btn:hover { background: rgba(16,28,56,0.90); color: #aad0ee; }
+    #back:hover { color: rgba(0,0,0,0.65); }
 
-    #overlay {
-      position: fixed; inset: 0; z-index: 100;
-      background: #020408;
-      opacity: 0; pointer-events: none;
-      transition: opacity 0.55s ease;
+    #lines {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      padding: 10vh 0;
     }
-    #overlay.fade { opacity: 1; }
 
-    #sound-btn {
-      position: fixed; bottom: 22px; left: 22px; z-index: 50;
-      background: none; border: none; cursor: pointer;
-      padding: 4px; opacity: 0.35; transition: opacity 0.2s;
-      -webkit-tap-highlight-color: transparent;
+    .ticker-row {
+      position: relative;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
     }
-    #sound-btn:hover { opacity: 0.75; }
-    #sound-btn svg { display: block; width: 18px; height: 18px; }
-
-    #zoom-ring {
-      position: fixed; bottom: 22px; right: 22px; z-index: 50;
-      width: 28px; height: 28px;
-      opacity: 0; transition: opacity 0.3s;
+    .ticker-row::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; top: 50%; height: 1px;
+      background: rgba(0,0,0,0.10);
       pointer-events: none;
     }
-    #zoom-ring.show { opacity: 1; }
-    #zoom-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-    #zoom-ring circle { fill: none; stroke: #3388ff; stroke-width: 2.5;
-      stroke-dasharray: 72; stroke-dashoffset: 72;
-      transition: stroke-dashoffset 0.1s linear; }
-
-    #hint {
-      position: fixed; bottom: 9%; left: 50%; transform: translateX(-50%);
-      z-index: 50; pointer-events: none;
-      display: flex; align-items: center; gap: 9px;
-      background: rgba(10,18,32,0.72); border: 1px solid rgba(80,130,200,0.18);
-      border-radius: 20px; padding: 7px 16px 7px 12px;
-      backdrop-filter: blur(6px);
-      opacity: 0; transition: opacity 0.55s ease;
+    .ticker-inner {
+      display: flex;
       white-space: nowrap;
+      will-change: transform;
     }
-    #hint.show { opacity: 1; }
-    #hint .hint-icon {
-      width: 18px; height: 18px; flex-shrink: 0; opacity: 0.75;
-    }
-    #hint .hint-text {
-      font-size: 9px; color: #88aacc; letter-spacing: 0.16em; text-transform: uppercase;
+    .ticker-inner span {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.85);
+      padding-right: 2em;
     }
 
-    /* Иконки анимированы */
-    @keyframes hint-rotate {
-      0%   { transform: rotate(0deg); }
-      80%  { transform: rotate(340deg); }
-      100% { transform: rotate(340deg); }
+    #bliks-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(60px);
     }
-    @keyframes hint-scroll {
-      0%, 100% { transform: translateY(0); opacity: 1; }
-      50%       { transform: translateY(3px); opacity: 0.4; }
+    #persp-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
     }
-    @keyframes hint-pulse {
-      0%, 100% { transform: scale(1); opacity: 0.75; }
-      50%       { transform: scale(1.25); opacity: 1; }
+    #lines { z-index: 2; }
+
+    @media (hover: hover) {
+      .ticker-row { transition: transform 0.3s ease; }
+      .ticker-row:hover .ticker-inner { animation-play-state: paused; }
+      .ticker-row:hover { transform: scaleY(1.35); }
     }
-    .anim-rotate { animation: hint-rotate 2.2s ease-in-out infinite; transform-origin: center; }
-    .anim-scroll { animation: hint-scroll 1.4s ease-in-out infinite; }
-    .anim-pulse  { animation: hint-pulse  1.2s ease-in-out infinite; }
   </style>
 </head>
 <body>
 
-<div id="overlay"></div>
-<div id="collection-info">
-  <div id="collection-name"></div>
-  <button id="enter-btn"></button>
+<canvas id="bliks-canvas"></canvas>
+<canvas id="persp-canvas"></canvas>
+<a id="back" href="index.html"></a>
+
+<div id="lines">
+  <div class="ticker-row" data-dir="-1" data-speed="0.071" data-href="gallery.html" data-text="Bangkok in Graphite — March 2026" style="cursor:pointer;"></div>
+  <div class="ticker-row" data-dir="1"  data-speed="0.045" data-i18n="coming_soon"></div>
+  <div class="ticker-row" data-dir="-1" data-speed="0.111" data-i18n="coming_not_soon"></div>
+  <div class="ticker-row" data-dir="1"  data-speed="0.071" data-i18n="coming_not_soon"></div>
 </div>
-<button id="sound-btn" title="sound">
-  <svg viewBox="0 0 18 18" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M3 6.5H6L10 3v12L6 11.5H3z"/>
-    <path id="sound-wave1" d="M12.5 6.5a3 3 0 0 1 0 5"/>
-    <path id="sound-wave2" d="M14 4.5a5.5 5.5 0 0 1 0 9"/>
-  </svg>
-</button>
-<div id="zoom-ring">
-  <svg viewBox="0 0 26 26">
-    <circle id="zoom-arc" cx="13" cy="13" r="11.5"/>
-  </svg>
-</div>
-<a id="back" href="index.html">← назад</a>
-<div id="wordmark">VoidWall</div>
-<div id="hint"></div>
 
 <script src="js/i18n.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || innerWidth < 768;
-I18N.addToggle('dark');
-document.getElementById('back').textContent = I18N.t('back');
-
-const COLLECTIONS = [
-  { name: { ru: 'Bangkok Graphite', en: 'Bangkok Graphite' }, href: 'gallery.html' },
-  { name: { ru: 'работаю над этим', en: 'working on it'    }, href: null },
-  { name: { ru: 'когда-нибудь',     en: 'sometime'         }, href: null },
-  { name: { ru: 'ещё думаю',        en: 'still thinking'   }, href: null },
-  { name: { ru: 'может быть',       en: 'maybe'            }, href: null },
-];
-
-// ─── Kelvin → RGB (Tanner Helland approximation) ───
-function kelvinToHex(K) {
-  const t = Math.min(Math.max(K, 1000), 40000) / 100;
-  let r, g, b;
-  if (t <= 66) {
-    r = 255;
-    g = Math.min(255, Math.max(0, 99.4708 * Math.log(t) - 161.1196));
-    b = t <= 19 ? 0 : Math.min(255, Math.max(0, 138.5177 * Math.log(t - 10) - 305.0448));
-  } else {
-    r = Math.min(255, Math.max(0, 329.6987 * Math.pow(t - 60, -0.1332)));
-    g = Math.min(255, Math.max(0, 288.1222 * Math.pow(t - 60, -0.0755)));
-    b = 255;
-  }
-  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
-}
-
-// Температуры: тёплый → холодный
-const TEMPS     = [2000, 3400, 5500, 9500, 18000];
-// Расстояния от центра (множитель POLY_R): намеренно разные
-const OBJ_RADII = [1.18, 0.62, 1.05, 0.78, 0.95];
-
-// ─── Сцена ───
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x020408);
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
-camera.position.set(0, 0, 9);
-const renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(isMobile ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, 2));
-document.body.appendChild(renderer.domElement);
-
-// ─── Освещение ───
-const ambientLight = new THREE.AmbientLight(0x111827, 0.6);
-scene.add(ambientLight);
-const keyLight = new THREE.PointLight(0xffffff, 1.8, 60);
-keyLight.position.set(6, 8, 12);
-scene.add(keyLight);
-const fillLight = new THREE.PointLight(0x3366cc, 0.7, 40);
-fillLight.position.set(-8, -4, 6);
-scene.add(fillLight);
-
-// ─── Звёзды ───
-(function () {
-  const n = isMobile ? 500 : 1200;
-  const pos = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    const θ = Math.random() * Math.PI * 2;
-    const φ = Math.acos(2 * Math.random() - 1);
-    const r = 18 + Math.random() * 20;
-    pos[i*3]   = r * Math.sin(φ) * Math.cos(θ);
-    pos[i*3+1] = r * Math.cos(φ);
-    pos[i*3+2] = r * Math.sin(φ) * Math.sin(θ);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({
-    color: 0x88aacc, size: 0.04, transparent: true, opacity: 0.4,
-    sizeAttenuation: true, depthWrite: false,
-  })));
-})();
-
-// ─── Группа ───
-const group = new THREE.Group();
-scene.add(group);
-
-const POLY_R = isMobile ? 2.6 : 3.0;
-
-// ─── Фоновый скелет: три вложенных многогранника (на мобильном только основной) ───
-const polyGeo  = new THREE.IcosahedronGeometry(POLY_R, 1);
-const edgesGeo = new THREE.EdgesGeometry(polyGeo);
-group.add(new THREE.LineSegments(edgesGeo,
-  new THREE.LineBasicMaterial({ color: 0x0d1e36, transparent: true, opacity: 0.22 })));
-if (!isMobile) {
-  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.DodecahedronGeometry(POLY_R * 0.74, 0)),
-    new THREE.LineBasicMaterial({ color: 0x091529, transparent: true, opacity: 0.16 })));
-  group.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(POLY_R * 0.42, 0)),
-    new THREE.LineBasicMaterial({ color: 0x060f1e, transparent: true, opacity: 0.18 })));
-}
-
-// ─── Glow-текстура ───
-const glowTex = (function () {
-  const s = 64, cvs = document.createElement('canvas');
-  cvs.width = cvs.height = s;
-  const ctx = cvs.getContext('2d');
-  const g = ctx.createRadialGradient(s/2,s/2,0, s/2,s/2,s/2);
-  g.addColorStop(0.0,  'rgba(255,255,255,1.0)');
-  g.addColorStop(0.15, 'rgba(220,240,255,1.0)');
-  g.addColorStop(0.4,  'rgba(120,180,255,0.7)');
-  g.addColorStop(1.0,  'rgba(60,100,255,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
-  return new THREE.CanvasTexture(cvs);
-})();
-
-// ─── Частицы ───
-(function () {
-  const N = isMobile ? 3500 : 76000;
-  const R_MAX = POLY_R * 10;
-  const pos = new Float32Array(N * 3);
-  const col = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const θ = Math.random() * Math.PI * 2;
-    const φ = Math.acos(2 * Math.random() - 1);
-    const r = R_MAX * Math.pow(Math.random(), 2.2);
-    pos[i*3]   = r * Math.sin(φ) * Math.cos(θ);
-    pos[i*3+1] = r * Math.cos(φ);
-    pos[i*3+2] = r * Math.sin(φ) * Math.sin(θ);
-    const bright = Math.max(0.04, 0.90 - (r / R_MAX) * 0.82);
-    const t = Math.random();
-    col[i*3]   = (0.45 + t * 0.55) * bright;
-    col[i*3+1] = (0.65 + t * 0.35) * bright;
-    col[i*3+2] = bright;
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), R_MAX);
-  // На мобильном: без glow-текстуры и аддитивного блендинга — намного быстрее
-  const mat = isMobile
-    ? new THREE.PointsMaterial({ size: 0.06, vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false, sizeAttenuation: true })
-    : new THREE.PointsMaterial({ size: 0.040, vertexColors: true, map: glowTex, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true });
-  group.add(new THREE.Points(geo, mat));
-})();
-
-// ─── Вершины икосаэдра → направления для объектов ───
-function getUniqueVerts(geo, eps) {
-  const p = geo.attributes.position;
-  const verts = [];
-  for (let i = 0; i < p.count; i++) {
-    const v = new THREE.Vector3().fromBufferAttribute(p, i);
-    if (!verts.some(u => u.distanceTo(v) < eps)) verts.push(v);
-  }
-  return verts;
-}
-function seededRng(seed) {
-  let s = seed;
-  return () => { s = Math.imul(s, 1664525) + 1013904223 | 0; return (s >>> 0) / 4294967295; };
-}
-function seededShuffle(arr, seed) {
-  const a = [...arr], rng = seededRng(seed);
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-const allVerts    = getUniqueVerts(polyGeo, 0.01);
-// Направления из икосаэдра, расстояния — из OBJ_RADII
-const objectVerts = seededShuffle(allVerts, 31337).slice(0, 5).map((v, i) =>
-  v.clone().normalize().multiplyScalar(POLY_R * OBJ_RADII[i])
-);
-
-// ─── Нестандартная фигура: спицы к центру + рёбра между объектами ───
-(function () {
-  const linePos = [];
-  const O = objectVerts;
-
-  // Спицы: каждый объект → центр
-  O.forEach(v => linePos.push(0,0,0, v.x,v.y,v.z));
-
-  // Рёбра: каждый объект к 2 ближайшим соседям
-  O.forEach((v, i) => {
-    const sorted = O.map((u, j) => ({ j, d: j === i ? Infinity : v.distanceTo(u) }))
-                    .sort((a, b) => a.d - b.d);
-    sorted.slice(0, 2).forEach(({ j }) => {
-      if (j > i) linePos.push(v.x,v.y,v.z, O[j].x,O[j].y,O[j].z);
-    });
-  });
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePos), 3));
-  group.add(new THREE.LineSegments(geo,
-    new THREE.LineBasicMaterial({ color: 0x2255aa, transparent: true, opacity: 0.50 })));
-
-  // Точки в вершинах смежных с объектами рёбер на икосаэдре
-  const ep  = edgesGeo.attributes.position;
-  const eps = 0.01;
-  const adjLines = [];
-  O.forEach(ov => {
-    for (let k = 0; k < ep.count; k += 2) {
-      const a = new THREE.Vector3().fromBufferAttribute(ep, k);
-      const b = new THREE.Vector3().fromBufferAttribute(ep, k + 1);
-      // Nearest point on icosahedron to each object vertex (by direction)
-      const aN = a.clone().normalize().multiplyScalar(ov.length());
-      const bN = b.clone().normalize().multiplyScalar(ov.length());
-      if (aN.distanceTo(ov) < 0.35 || bN.distanceTo(ov) < 0.35) {
-        adjLines.push(a.x,a.y,a.z, b.x,b.y,b.z);
-      }
-    }
-  });
-  const adjGeo = new THREE.BufferGeometry();
-  adjGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(adjLines), 3));
-  group.add(new THREE.LineSegments(adjGeo,
-    new THREE.LineBasicMaterial({ color: 0x3388ff, transparent: true, opacity: 0.55 })));
-
-  // Светящиеся точки вершин объектов
-  const dotPos = new Float32Array(O.length * 3);
-  O.forEach((v, i) => { dotPos[i*3]=v.x; dotPos[i*3+1]=v.y; dotPos[i*3+2]=v.z; });
-  const dotGeo = new THREE.BufferGeometry();
-  dotGeo.setAttribute('position', new THREE.BufferAttribute(dotPos, 3));
-  group.add(new THREE.Points(dotGeo, new THREE.PointsMaterial({
-    color: 0xaaccff, size: 0.10, map: glowTex,
-    transparent: true, opacity: 0.90,
-    blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
-  })));
-})();
-
-// ─── Объекты — шары в цветах Кельвина ───
-const SPHERE_R  = isMobile ? 0.16 : 0.20;
-const GLOW_SIZE = isMobile ? 0.75 : 0.95;
-
-const objects = objectVerts.map((vert, i) => {
-  const col    = COLLECTIONS[i];
-  const normal = vert.clone().normalize();
-
-  const baseHex   = kelvinToHex(TEMPS[i]);
-  const cBase     = new THREE.Color(baseHex).multiplyScalar(0.55);
-  const cActive   = new THREE.Color(baseHex).multiplyScalar(1.50);
-
-  const sphereMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x000000), emissive: cBase.clone(), emissiveIntensity: 1.0, roughness: 1.0, metalness: 0.0, transparent: true, opacity: 0.75, depthWrite: false });
-  const sphere    = new THREE.Mesh(new THREE.SphereGeometry(SPHERE_R, isMobile ? 10 : 22, isMobile ? 6 : 14), sphereMat);
-  sphere.position.copy(vert);
-  group.add(sphere);
-
-  const glowMat = new THREE.SpriteMaterial({
-    map: glowTex, color: cBase.clone(),
-    blending: THREE.AdditiveBlending,
-    transparent: true, opacity: 0.55, depthWrite: false,
-  });
-  const glow = new THREE.Sprite(glowMat);
-  glow.position.copy(vert);
-  glow.scale.setScalar(GLOW_SIZE);
-  group.add(glow);
-
-  return { sphere, sphereMat, glow, glowMat, normal, col, frontT: 0, cBase, cActive };
-});
-
-// ─── Зум ───
-const ZOOM_MIN = 3.8, ZOOM_MAX = 16, ZOOM_START = 9;
-let zoomTarget  = ZOOM_START;
-let transitioning = false;
-
-const overlayEl  = document.getElementById('overlay');
-const zoomRingEl = document.getElementById('zoom-ring');
-const zoomArcEl  = document.getElementById('zoom-arc');
-const ARC_LEN    = 72; // stroke-dasharray
-
-window.addEventListener('wheel', e => {
-  zoomTarget = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomTarget + e.deltaY * 0.012));
-  if (hintState === 1) hideHint();
-}, { passive: true });
-
-// ─── Вращение ───
-// ─── Подсказки ───
-const hintEl = document.getElementById('hint');
-const HINTS = [
-  { // 0 — вращение
-    icon: `<svg class="hint-icon anim-rotate" viewBox="0 0 18 18" fill="none" stroke="#88aacc" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 9A6 6 0 1 1 9 3"/><polyline points="9,0.5 9,4 12.5,4"/></svg>`,
-    key: 'hint_rotate',
-  },
-  { // 1 — зум скроллом
-    icon: `<svg class="hint-icon anim-scroll" viewBox="0 0 18 18" fill="none" stroke="#88aacc" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="2" width="7" height="12" rx="3.5"/><line x1="9" y1="5" x2="9" y2="8"/><line x1="7.5" y1="7" x2="9" y2="8.5"/><line x1="10.5" y1="7" x2="9" y2="8.5"/></svg>`,
-    key: 'hint_zoom',
-  },
-  { // 2 — открыть
-    icon: `<svg class="hint-icon anim-pulse" viewBox="0 0 18 18" fill="none" stroke="#88aacc" stroke-width="1.4" stroke-linecap="round"><circle cx="9" cy="9" r="3"/><circle cx="9" cy="9" r="6" stroke-opacity="0.35"/></svg>`,
-    key: 'hint_open',
-  },
-];
-let hintState = -1;
-let hintTimer = null;
-
-function showHint(state) {
-  if (hintState === state) return;
-  hintState = state;
-  const h = HINTS[state];
-  hintEl.innerHTML = h.icon + `<span class="hint-text">${I18N.t(h.key)}</span>`;
-  hintEl.classList.add('show');
-  clearTimeout(hintTimer);
-  hintTimer = setTimeout(hideHint, 5000);
-}
-function hideHint() {
-  hintEl.classList.remove('show');
-}
-
-// Смена языка: обновляем активную подсказку и статичные тексты
-window.addEventListener('langchange', () => {
-  if (hintState >= 0 && hintEl.classList.contains('show')) {
-    const span = hintEl.querySelector('.hint-text');
-    if (span) span.textContent = I18N.t(HINTS[hintState].key);
-  }
+  I18N.addToggle('light');
   document.getElementById('back').textContent = I18N.t('back');
-  enterBtnEl.textContent = I18N.t('enter_collection');
-});
-
-// Показать подсказку о вращении через 1.5 с
-setTimeout(() => showHint(0), 1500);
-
-let drag = false, px = 0, py = 0;
-const quatTarget  = new THREE.Quaternion();
-const quatCurrent = new THREE.Quaternion();
-const qRX = new THREE.Quaternion(), qRY = new THREE.Quaternion();
-const AX  = new THREE.Vector3(1, 0, 0);
-const AY  = new THREE.Vector3(0, 1, 0);
-let firstDrag = false;
-
-function dragStart(x, y) {
-  drag = true; px = x; py = y;
-  if (hintState === 0) {
-    hideHint();
-    // Через 2 с после первого вращения — подсказка о зуме
-    if (!firstDrag) {
-      firstDrag = true;
-      clearTimeout(hintTimer);
-      hintTimer = setTimeout(() => showHint(1), 2000);
-    }
-  }
-}
-function dragMove(x, y) {
-  if (!drag) return;
-  const rotFrac = Math.max(0.06, (camera.position.z - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN));
-  const sens = 0.007 * rotFrac;
-  qRY.setFromAxisAngle(AY, (x - px) * sens);
-  qRX.setFromAxisAngle(AX, (y - py) * sens);
-  quatTarget.premultiply(qRY).premultiply(qRX);
-  px = x; py = y;
-}
-function dragEnd() { drag = false; }
-
-renderer.domElement.addEventListener('mousedown', e => dragStart(e.clientX, e.clientY));
-window.addEventListener('mousemove',  e => dragMove(e.clientX, e.clientY));
-window.addEventListener('mouseup',    dragEnd);
-let pinchDist0 = 0;
-renderer.domElement.addEventListener('touchstart', e => {
-  if (e.touches.length === 2) {
-    pinchDist0 = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
-  } else {
-    const t = e.touches[0]; dragStart(t.clientX, t.clientY);
-  }
-}, { passive: true });
-window.addEventListener('touchmove', e => {
-  if (e.touches.length === 2) {
-    const d = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
-    zoomTarget = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomTarget - (d - pinchDist0) * 0.025));
-    pinchDist0 = d;
-    if (hintState === 1) hideHint();
-  } else {
-    const t = e.touches[0]; dragMove(t.clientX, t.clientY);
-  }
-}, { passive: true });
-window.addEventListener('touchend', e => { if (e.touches.length < 2) dragEnd(); }, { passive: true });
-
-
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-const collInfoEl = document.getElementById('collection-info');
-const collNameEl = document.getElementById('collection-name');
-const enterBtnEl = document.getElementById('enter-btn');
-enterBtnEl.textContent = I18N.t('enter_collection');
-enterBtnEl.addEventListener('click', () => {
-  if (enterBtnEl._href) {
-    overlayEl.classList.add('fade');
-    setTimeout(() => { window.location.href = enterBtnEl._href; }, 550);
-  }
-});
-
-// ─── Аудио (Web Audio API) ───
-let _ac = null, _osc1 = null, _osc2 = null, _filt = null, _mGain = null;
-let _melodOsc = null, _muted = false, _targetVol = 0.32;
-
-// Пентатоника Ре-минор (D3 D4 F3 A3 C4 E3) — мелодичная последовательность
-const MELODY = [147, 175, 220, 196, 262, 165, 220, 175, 196, 247, 175, 220];
-let _noteIdx = 0;
-
-function _scheduleNote() {
-  if (!_ac || _muted) return;
-  const freq = MELODY[_noteIdx % MELODY.length];
-  _noteIdx++;
-  _melodOsc.frequency.setTargetAtTime(freq, _ac.currentTime, 0.18);
-  setTimeout(_scheduleNote, 1600 + Math.random() * 1400);
-}
-
-function _initAudio() {
-  if (_ac) return;
-  try { _ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
-  _ac.resume();
-
-  // Дроун-основа: два осциллятора с биением
-  _osc1 = _ac.createOscillator(); _osc1.type = 'sine';     _osc1.frequency.value = 110;
-  _osc2 = _ac.createOscillator(); _osc2.type = 'sine';     _osc2.frequency.value = 110.5;
-  // Мелодический осциллятор поверх дрона
-  _melodOsc = _ac.createOscillator(); _melodOsc.type = 'triangle'; _melodOsc.frequency.value = 220;
-  // Тихая субгармоника для глубины
-  const oscSub = _ac.createOscillator(); oscSub.type = 'sine'; oscSub.frequency.value = 55;
-
-  // Шум — космический шелест
-  const nLen = Math.floor(_ac.sampleRate * 4);
-  const nBuf = _ac.createBuffer(1, nLen, _ac.sampleRate);
-  const nd = nBuf.getChannelData(0);
-  for (let i = 0; i < nLen; i++) nd[i] = Math.random() * 2 - 1;
-  const noise = _ac.createBufferSource(); noise.buffer = nBuf; noise.loop = true;
-  const nFilt = _ac.createBiquadFilter(); nFilt.type = 'bandpass'; nFilt.frequency.value = 600; nFilt.Q.value = 2;
-  const nGain = _ac.createGain(); nGain.gain.value = 0.045;
-
-  // Мелодия через реверб-дилей (один эхо-отражение)
-  const delay = _ac.createDelay(1.0); delay.delayTime.value = 0.42;
-  const delFb  = _ac.createGain(); delFb.gain.value = 0.38;
-  const delOut = _ac.createGain(); delOut.gain.value = 0.28;
-
-  // Финальный фильтр — открывается при зуме
-  _filt = _ac.createBiquadFilter(); _filt.type = 'lowpass'; _filt.frequency.value = 900; _filt.Q.value = 3;
-  _mGain = _ac.createGain(); _mGain.gain.value = 0;
-
-  const gD  = _ac.createGain(); gD.gain.value = 0.30;  // дрон 1
-  const gD2 = _ac.createGain(); gD2.gain.value = 0.26; // дрон 2
-  const gM  = _ac.createGain(); gM.gain.value = 0.22;  // мелодия прямой сигнал
-  const gS  = _ac.createGain(); gS.gain.value = 0.12;  // суббас
-
-  // Маршрутизация дрона
-  _osc1.connect(gD);  gD.connect(_filt);
-  _osc2.connect(gD2); gD2.connect(_filt);
-  oscSub.connect(gS); gS.connect(_filt);
-  // Мелодия + эхо
-  _melodOsc.connect(gM); gM.connect(_filt);
-  _melodOsc.connect(delay); delay.connect(delFb); delFb.connect(delay);
-  delay.connect(delOut); delOut.connect(_filt);
-  // Шум
-  noise.connect(nFilt); nFilt.connect(nGain); nGain.connect(_filt);
-
-  _filt.connect(_mGain); _mGain.connect(_ac.destination);
-
-  _osc1.start(); _osc2.start(); _melodOsc.start(); oscSub.start(); noise.start();
-  _mGain.gain.linearRampToValueAtTime(_targetVol, _ac.currentTime + 2.5);
-
-  // Запуск мелодии
-  setTimeout(_scheduleNote, 1800);
-}
-
-// ─── Кнопка звука ───
-const soundBtn  = document.getElementById('sound-btn');
-const wave1El   = document.getElementById('sound-wave1');
-const wave2El   = document.getElementById('sound-wave2');
-
-soundBtn.addEventListener('click', () => {
-  _initAudio();
-  _muted = !_muted;
-  if (_ac) {
-    const t = _ac.currentTime;
-    _mGain.gain.setTargetAtTime(_muted ? 0 : _targetVol, t, 0.25);
-  }
-  wave1El.style.opacity = _muted ? '0.15' : '1';
-  wave2El.style.opacity = _muted ? '0.15' : '1';
-  soundBtn.style.opacity = _muted ? '0.22' : '0.35';
-});
-
-['mousedown', 'touchstart', 'wheel'].forEach(ev =>
-  window.addEventListener(ev, _initAudio, { once: true, passive: true })
-);
-
-// ─── Анимация ───
-const clock = new THREE.Clock();
-const _wn   = new THREE.Vector3();
-const _fwd  = new THREE.Vector3(0, 0, 1);
-let wasRingActive = false;
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  if (!drag) {
-    // Авторотация: полная при max зуме-аут, останавливается при зуме-ин
-    const rotFrac = Math.max(0, (camera.position.z - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN));
-    const autoSpeed = 0.002 * rotFrac;
-    if (autoSpeed > 0.00005) {
-      qRY.setFromAxisAngle(AY, autoSpeed);
-      quatTarget.premultiply(qRY);
-    }
-  }
-  quatCurrent.slerp(quatTarget, 0.08);
-  group.quaternion.copy(quatCurrent);
-
-  // Плавный зум
-  camera.position.z += (zoomTarget - camera.position.z) * 0.09;
-
-  // Кольцо прогресса зума когда объект с переходом впереди
-  const zoomFrac = Math.max(0, (ZOOM_MAX - camera.position.z) / (ZOOM_MAX - ZOOM_MIN));
-
-  // Аудио: частота растёт при зуме, биение ускоряется при вращении
-  if (_ac) {
-    const now = _ac.currentTime;
-    const baseFreq = 160 + zoomFrac * 200;         // 160–360 Гц при зуме
-    const beat     = drag ? 3.0 : 0.6;             // биение быстрее при вращении
-    _osc1.frequency.setTargetAtTime(baseFreq,        now, 0.4);
-    _osc2.frequency.setTargetAtTime(baseFreq + beat, now, 0.25);
-    _filt.frequency.setTargetAtTime(600 + zoomFrac * 3000, now, 0.3);
-  }
-
-  let frontObj = null, maxDot = -Infinity;
-  objects.forEach(o => {
-    _wn.copy(o.normal).applyQuaternion(group.quaternion);
-    const d = _wn.dot(_fwd);
-    if (d > maxDot) { maxDot = d; frontObj = o; }
+  window.addEventListener('langchange', () => {
+    document.getElementById('back').textContent = I18N.t('back');
+    fillAll();
   });
 
-  objects.forEach(o => {
-    const isFront = o === frontObj && maxDot > 0.20;
-    o.frontT += ((isFront ? 1 : 0) - o.frontT) * 0.055;
+  const rows = Array.from(document.querySelectorAll('.ticker-row'));
 
-    // Сфера — самосвечение нарастает при выделении, потом растворяется в свет
-    o.sphereMat.emissive.copy(o.cBase).lerp(o.cActive, o.frontT);
-    o.sphereMat.emissiveIntensity = 1.0 + o.frontT * 1.8;
-    o.sphereMat.opacity = 0.75 - o.frontT * 0.73;
+  function fillRow(row) {
+    const text = row.dataset.i18n ? I18N.t(row.dataset.i18n) : row.dataset.text;
+    if (!text) return;
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;font-size:28px;font-weight:300;letter-spacing:0.18em;text-transform:uppercase;padding-right:2em;white-space:nowrap;';
+    probe.textContent = text;
+    document.body.appendChild(probe);
+    const w = probe.getBoundingClientRect().width;
+    probe.remove();
+    if (!w) { requestAnimationFrame(() => fillRow(row)); return; }
+    let count = Math.ceil(window.innerWidth * 2.4 / w);
+    if (count % 2 !== 0) count++;
+    if (count < 4) count = 4;
+    let inner = row.querySelector('.ticker-inner');
+    if (!inner) { inner = document.createElement('div'); inner.className = 'ticker-inner'; row.appendChild(inner); }
+    inner.innerHTML = Array(count).fill(`<span>${text}</span>`).join('');
+  }
 
-    // Свечение: в покое почти невидимо, при активации расширяется в чистый свет
-    o.glowMat.color.copy(o.cBase).lerp(o.cActive, o.frontT);
-    o.glow.scale.setScalar(GLOW_SIZE * (0.35 + o.frontT * 4.65));
-    o.glowMat.opacity = 0.06 + o.frontT * 0.84;
+  function fillAll() { rows.forEach(fillRow); }
+  fillAll();
+
+  // ── Блики как от съёмки экрана ──
+  const bCanvas = document.getElementById('bliks-canvas');
+  const bCtx    = bCanvas.getContext('2d');
+  let scrollPhase = 0;
+
+  function resizeBliks() { bCanvas.width = window.innerWidth; bCanvas.height = window.innerHeight; }
+  resizeBliks();
+
+  // Параметры бликов — каждый blob движется по своей траектории
+  const BLOBS = [
+    { fx: 0.38, fy: 0.28, rx: 0.55, ry: 0.40, sp: 0.07, ph: 0.0,  a: 0.55 },
+    { fx: 0.62, fy: 0.65, rx: 0.45, ry: 0.50, sp: 0.05, ph: 2.1,  a: 0.45 },
+    { fx: 0.20, fy: 0.52, rx: 0.35, ry: 0.30, sp: 0.09, ph: 4.3,  a: 0.40 },
+    { fx: 0.75, fy: 0.38, rx: 0.40, ry: 0.45, sp: 0.06, ph: 1.5,  a: 0.38 },
+  ];
+
+  function drawBliks(t) {
+    const W = bCanvas.width, H = bCanvas.height;
+    bCtx.clearRect(0, 0, W, H);
+
+    // multiply затемняет фон — блики видны как более тёмные/насыщенные пятна
+    bCtx.globalCompositeOperation = 'multiply';
+
+    // Плавающие пятна — слегка тонированные, как отражение RGB-пикселей
+    BLOBS.forEach(b => {
+      const cx = W * (b.fx + Math.sin(t * b.sp + b.ph) * 0.14 + scrollPhase * 0.02);
+      const cy = H * (b.fy + Math.cos(t * b.sp * 0.7 + b.ph) * 0.11 + scrollPhase * 0.01);
+      const rw = W * b.rx, rh = H * b.ry;
+      const flicker = 0.8 + Math.sin(t * 13.7 + b.ph) * 0.2;
+
+      bCtx.save();
+      bCtx.translate(cx, cy);
+      bCtx.scale(1, rh / rw);
+      const g = bCtx.createRadialGradient(0, 0, 0, 0, 0, rw);
+      // тонированные пятна: тёплый/холодный оттенок
+      const warm = b.ph % 2 < 1;
+      const c0 = warm ? `rgba(210,200,230,${(b.a * flicker).toFixed(3)})` : `rgba(200,215,235,${(b.a * flicker).toFixed(3)})`;
+      const c1 = warm ? `rgba(225,215,240,${(b.a * 0.4 * flicker).toFixed(3)})` : `rgba(215,228,245,${(b.a * 0.4 * flicker).toFixed(3)})`;
+      g.addColorStop(0,   c0);
+      g.addColorStop(0.6, c1);
+      g.addColorStop(1,   'rgba(245,245,245,0)');
+      bCtx.fillStyle = g;
+      bCtx.beginPath();
+      bCtx.arc(0, 0, rw, 0, Math.PI * 2);
+      bCtx.fill();
+      bCtx.restore();
+    });
+
+    bCtx.globalCompositeOperation = 'source-over';
+  }
+
+  // ── Canvas перспективы ──
+  const pCanvas = document.getElementById('persp-canvas');
+  const pCtx    = pCanvas.getContext('2d');
+  const perspOffsets = rows.map(() => 0); // смещение текста на каждой из 8 линий
+
+  function resizePersp() {
+    pCanvas.width  = window.innerWidth;
+    pCanvas.height = window.innerHeight;
+  }
+  resizePersp();
+  window.addEventListener('resize', () => { fillAll(); resizeBliks(); resizePersp(); });
+
+  // Рисует бегущий текст вдоль линии с перспективным уменьшением
+  function drawPerspLine(x1, y1, x2, y2, text, offset) {
+    const dx  = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ang = Math.atan2(dy, dx);
+
+    pCtx.save();
+    pCtx.translate(x1, y1);
+    pCtx.rotate(ang);
+
+    const unit = text + '   ·   ';
+    pCtx.font = '300 14px Segoe UI, sans-serif';
+    const unitW = pCtx.measureText(unit).width;
+
+    let x = -(offset % unitW);
+    while (x < len) {
+      const t     = Math.max(0, x / len);          // 0=спереди 1=VP
+      const scale = Math.max(0.04, 1 - t * 0.88);  // текст уменьшается к VP
+      const alpha = Math.max(0, (1 - t) * 0.45);
+      if (x > -unitW && alpha > 0.005) {
+        pCtx.save();
+        pCtx.translate(x, 0);
+        pCtx.scale(scale, scale);
+        pCtx.globalAlpha = alpha;
+        pCtx.fillText(unit, 0, 0);
+        pCtx.restore();
+      }
+      x += unitW;
+    }
+    pCtx.restore();
+  }
+
+  function drawPerspCanvas(mult) {
+    pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+    const W  = pCanvas.width, H = pCanvas.height;
+    const vx = W / 2, vy = H / 2;
+
+    pCtx.fillStyle = 'rgba(0,0,0,0.82)';
+
+    rows.forEach((row, i) => {
+      const rect = row.getBoundingClientRect();
+      const ry   = rect.top + rect.height / 2;
+      const text = row.dataset.i18n ? I18N.t(row.dataset.i18n) : row.dataset.text;
+      if (!text) return;
+
+      // линия слева и справа от строки к точке схода
+      pCtx.strokeStyle = 'rgba(0,0,0,0.09)';
+      pCtx.lineWidth   = 0.6;
+      pCtx.beginPath(); pCtx.moveTo(0, ry); pCtx.lineTo(vx, vy); pCtx.stroke();
+      pCtx.beginPath(); pCtx.moveTo(W, ry); pCtx.lineTo(vx, vy); pCtx.stroke();
+
+      // бегущий текст вдоль обеих линий
+      drawPerspLine(0, ry, vx, vy, text, perspOffsets[i]);
+      drawPerspLine(W, ry, vx, vy, text, perspOffsets[i]);
+
+      // сдвигаем смещение синхронно со скоростью строки
+      perspOffsets[i] += BASE[i] * mult * 30;
+    });
+  }
+
+  document.querySelector('[data-href]').addEventListener('click', e => {
+    location.href = e.currentTarget.dataset.href;
   });
 
-  // Название коллекции на месте объекта
-  const showInfo = frontObj && frontObj.frontT > 0.30;
-  collInfoEl.classList.toggle('show', !!showInfo);
-  if (showInfo) {
-    // Проецируем мировую позицию объекта в экранные координаты
-    const _wp = frontObj.sphere.position.clone().applyQuaternion(group.quaternion);
-    _wp.project(camera);
-    collInfoEl.style.left = `${(_wp.x * 0.5 + 0.5) * innerWidth}px`;
-    collInfoEl.style.top  = `${(-_wp.y * 0.5 + 0.5) * innerHeight}px`;
+  // ── JS-тикер со скролл-ускорением ──
+  const BASE   = rows.map(r => parseFloat(r.dataset.speed));
+  const DIR    = rows.map(r => parseInt(r.dataset.dir));
+  const px     = rows.map(() => 0); // пиксельное смещение
+  const paused = rows.map(() => false);
 
-    collNameEl.textContent = frontObj.col.name[I18N.lang];
-    // Кнопка входа — показываем только при достаточном приближении
-    const showEnter = !!frontObj.col.href && zoomFrac > 0.55;
-    enterBtnEl._href = showEnter ? frontObj.col.href : null;
-    enterBtnEl.classList.toggle('show', showEnter);
+  let boost     = 0;
+  let scrollDir = 1;  // направление скрола: 1 = вниз, -1 = вверх
+  let lastTime  = performance.now();
+
+  rows.forEach((row, i) => {
+    row.addEventListener('mouseenter', () => { paused[i] = true; });
+    row.addEventListener('mouseleave', () => { paused[i] = false; });
+  });
+
+  function tick(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    boost *= 0.92;
+    const mult = 1 + boost * 15;
+
+    rows.forEach((row, i) => {
+      const inner = row.querySelector('.ticker-inner');
+      if (!inner || !inner.children.length || paused[i]) return;
+      // Половина реальной ширины — граница бесшовного цикла
+      const half = inner.scrollWidth / 2;
+      if (!half) return;
+      px[i] = (px[i] + DIR[i] * scrollDir * BASE[i] * half * mult * dt + half) % half;
+      inner.style.transform = `translateX(-${px[i]}px)`;
+    });
+
+    drawBliks(now / 1000);
+    drawPerspCanvas(mult);
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function addBoost(d) {
+    if (Math.abs(d) > 0.5) scrollDir = d > 0 ? 1 : -1;
+    boost = Math.min(1, boost + Math.abs(d) * 0.010);
+    scrollPhase += d * 0.003;
   }
 
-  // Кольцо зума — показываем только когда передний объект кликабелен
-  const ringActive = frontObj?.col.href && frontObj.frontT > 0.5;
-  zoomRingEl.classList.toggle('show', !!ringActive);
-  wasRingActive = !!ringActive;
-  if (ringActive) {
-    const offset = ARC_LEN * (1 - zoomFrac);
-    zoomArcEl.style.strokeDashoffset = offset;
-    // Цвет кольца = цвет объекта
-    const c = frontObj.sphereMat.color;
-    zoomArcEl.style.stroke = `rgb(${(c.r*255)|0},${(c.g*255)|0},${(c.b*255)|0})`;
-  }
+  window.addEventListener('wheel', e => addBoost(e.deltaY), { passive: true });
 
-  renderer.render(scene, camera);
-}
-animate();
+  let touchY = 0;
+  window.addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
+  window.addEventListener('touchmove',  e => {
+    const dy = touchY - e.touches[0].clientY;
+    touchY = e.touches[0].clientY;
+    addBoost(dy * 3);
+  }, { passive: true });
 </script>
 </body>
 </html>
