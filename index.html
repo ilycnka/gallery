@@ -137,7 +137,7 @@ function createNavTexture(text, opacity, w, h) {
 
 // ─── Треугольник-навигация ───
 const R = isMobile ? 1.6 : 2.2;
-const CANVAS_W = 512, CANVAS_H = 64;
+const CANVAS_W = 1024, CANVAS_H = 128;
 const LABEL_H  = 0.72, LABEL_W = LABEL_H * CANVAS_W / CANVAS_H;
 
 // Вершины равностороннего треугольника: верх, нижний-левый, нижний-правый
@@ -169,7 +169,7 @@ triGroup.add(new THREE.Line(edgeGeo,
 const navMeshes = [];
 
 NAV.forEach(item => {
-  const tex  = createNavTexture(I18N.t(item.i18nKey), 0.72, CANVAS_W, CANVAS_H);
+  const tex  = createNavTexture(I18N.t(item.i18nKey), 1.0, CANVAS_W, CANVAS_H);
   const mesh = new THREE.Mesh(
     new THREE.PlaneGeometry(LABEL_W, LABEL_H),
     new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
