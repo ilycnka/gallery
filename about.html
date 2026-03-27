@@ -118,7 +118,6 @@
       text1: 'my name is ilya i am 24 i grew up in minsk belarus built a career in it moved to asia and for the last year i have been living in bangkok love travelling space dinosaurs cats and drawing',
       text2: 'here i build virtual spaces where i put my drawings',
       text3: 'in return for your support i place your name on available works',
-      meta:  'medium — pencil on paper\nlocation — bangkok thailand\nyear — 2026',
     },
     ru: {
       back:  '← назад',
@@ -126,7 +125,6 @@
       text1: 'меня зовут илья мне 24 я вырос в минске беларусь построил карьеру в ит переехал в азию и последний год живу в бангкоке люблю путешествовать космос динозавров котов и рисовать',
       text2: 'здесь я создаю виртуальные пространства где выставляю свои рисунки',
       text3: 'за поддержку я размещаю ваше имя на свободных работах',
-      meta:  'материал — карандаш на бумаге\nместо — бангкок таиланд\nгод — 2026',
     },
   };
 
@@ -137,7 +135,7 @@
     document.getElementById('text1').textContent = c.text1;
     document.getElementById('text2').textContent = c.text2;
     document.getElementById('text3').textContent = c.text3;
-    document.getElementById('meta').innerHTML    = c.meta.replace(/\n/g, '<br>');
+    // meta element removed — nothing to render
     document.documentElement.lang = I18N.lang;
   }
 
