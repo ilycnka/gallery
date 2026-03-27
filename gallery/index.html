@@ -89,7 +89,7 @@
       transition: opacity 0.3s ease;
     }
     #info-title {
-      font-size: 13px; font-weight: 300;
+      font-size: 18px; font-weight: 400;
       letter-spacing: 0.22em; text-transform: uppercase;
       color: rgba(28,24,20,1.0); font-size: 15px;
     }
@@ -139,7 +139,7 @@ window.addEventListener('langchange', () => {
 // ─── Сцена ───────────────────────────────────────────────────────────
 const canvas   = document.getElementById('bg');
 const scene    = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xffffff, 0.055); // лёгкая белая дымка
+scene.fog = new THREE.FogExp2(0xffffff, 0.055);
 const camera   = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 200);
 camera.position.set(0, 2, 14);
 camera.lookAt(0, 0, 0);
