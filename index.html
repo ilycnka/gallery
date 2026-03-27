@@ -122,7 +122,7 @@ function createNavTexture(text, opacity, w, h) {
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, w, h);
-  let size = Math.round(h * 0.38);
+  let size = Math.round(h * 0.58);
   ctx.font = `100 ${size}px Inter, sans-serif`;
   while (ctx.measureText(text).width > w * 0.92 && size > 8) {
     size -= 1;
@@ -132,7 +132,11 @@ function createNavTexture(text, opacity, w, h) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, w / 2, h / 2);
-  return new THREE.CanvasTexture(c);
+  // Отключаем мипмаппинг — он размывает текст
+  const tex = new THREE.CanvasTexture(c);
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  return tex;
 }
 
 // ─── Треугольник-навигация ───
