@@ -85,17 +85,19 @@ function makeParticleTex() {
 // Шейдер вычисляет Z-позицию по времени — нулевая нагрузка на CPU в анимации
 const particleMat = new THREE.ShaderMaterial({
   uniforms: {
-    uTime: { value: 0 },
-    uMap:  { value: makeParticleTex() },
-    uSize: { value: isMobile ? 0.055 : 0.036 },
+    uTime:  { value: 0 },
+    uMap:   { value: makeParticleTex() },
+    uSize:  { value: isMobile ? 0.055 : 0.036 },
+    uSpeed: { value: isMobile ? 18.0 : 6.48 },
   },
   vertexShader: `
     uniform float uTime;
     uniform float uSize;
+    uniform float uSpeed;
     void main() {
       vec3 pos = position;
       // Зацикленное движение по Z: от -12 до 24 (диапазон 36)
-      pos.z = mod(position.z + uTime * 6.48 + 12.0, 36.0) - 12.0;
+      pos.z = mod(position.z + uTime * uSpeed + 12.0, 36.0) - 12.0;
       vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
       gl_PointSize = uSize * projectionMatrix[1][1] * 450.0 / max(0.1, -mvPos.z);
       gl_Position = projectionMatrix * mvPos;
