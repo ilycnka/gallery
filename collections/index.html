@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Collections — VoidWall</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #f5f5f5;
+      font-family: 'Segoe UI', sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    #back {
+      position: fixed;
+      top: 22px; left: 22px; z-index: 10;
+      font-size: 11px;
+      color: rgba(0,0,0,0.28);
+      letter-spacing: 0.10em;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    #back:hover { color: rgba(0,0,0,0.65); }
+
+    #lines {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      padding: 10vh 0;
+    }
+
+    .ticker-row {
+      position: relative;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+    }
+    .ticker-row::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; top: 50%; height: 1px;
+      background: rgba(0,0,0,0.10);
+      pointer-events: none;
+    }
+    .ticker-inner {
+      display: flex;
+      white-space: nowrap;
+      will-change: transform;
+    }
+    .ticker-inner span {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.85);
+      padding-right: 2em;
+    }
+
+    #bliks-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(60px);
+    }
+    #persp-canvas {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    #lines { z-index: 2; }
+
+    @media (hover: hover) {
+      .ticker-row { transition: transform 0.3s ease; }
+      .ticker-row:hover .ticker-inner { animation-play-state: paused; }
+      .ticker-row:hover { transform: scaleY(1.35); }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="bliks-canvas"></canvas>
+<canvas id="persp-canvas"></canvas>
+<a id="back" href="../"></a>
+
+<div id="lines">
+  <div class="ticker-row" data-dir="-1" data-speed="0.071" data-href="../gallery" data-text="Bangkok in Graphite" style="cursor:pointer;"></div>
+  <div class="ticker-row" data-dir="1"  data-speed="0.045" data-i18n="coming_soon"></div>
+  <div class="ticker-row" data-dir="-1" data-speed="0.111" data-i18n="coming_not_soon"></div>
+  <div class="ticker-row" data-dir="1"  data-speed="0.071" data-i18n="coming_not_soon"></div>
+</div>
+
+<script src="../js/i18n.js?v=2"></script>
+<script>
+  I18N.addToggle('light');
+  document.getElementById('back').textContent = I18N.t('back');
+  window.addEventListener('langchange', () => {
+    document.getElementById('back').textContent = I18N.t('back');
+    fillAll();
+  });
+
+  const rows = Array.from(document.querySelectorAll('.ticker-row'));
+
+  function fillRow(row) {
+    const text = row.dataset.i18n ? I18N.t(row.dataset.i18n) : row.dataset.text;
+    if (!text) return;
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;font-size:28px;font-weight:300;letter-spacing:0.18em;text-transform:uppercase;padding-right:2em;white-space:nowrap;';
+    probe.textContent = text;
+    document.body.appendChild(probe);
+    const w = probe.getBoundingClientRect().width;
+    probe.remove();
+    if (!w) { requestAnimationFrame(() => fillRow(row)); return; }
+    let count = Math.ceil(window.innerWidth * 2.4 / w);
+    if (count % 2 !== 0) count++;
+    if (count < 4) count = 4;
+    let inner = row.querySelector('.ticker-inner');
+    if (!inner) { inner = document.createElement('div'); inner.className = 'ticker-inner'; row.appendChild(inner); }
+    inner.innerHTML = Array(count).fill(`<span>${text}</span>`).join('');
+  }
+
+  function fillAll() { rows.forEach(fillRow); }
+  fillAll();
+
+  // ── Блики как от съёмки экрана ──
+  const bCanvas = document.getElementById('bliks-canvas');
+  const bCtx    = bCanvas.getContext('2d');
+  let scrollPhase = 0;
+
+  function resizeBliks() { bCanvas.width = window.innerWidth; bCanvas.height = window.innerHeight; }
+  resizeBliks();
+
+  // Параметры бликов — каждый blob движется по своей траектории
+  const BLOBS = [
+    { fx: 0.38, fy: 0.28, rx: 0.55, ry: 0.40, sp: 0.07, ph: 0.0,  a: 0.55 },
+    { fx: 0.62, fy: 0.65, rx: 0.45, ry: 0.50, sp: 0.05, ph: 2.1,  a: 0.45 },
+    { fx: 0.20, fy: 0.52, rx: 0.35, ry: 0.30, sp: 0.09, ph: 4.3,  a: 0.40 },
+    { fx: 0.75, fy: 0.38, rx: 0.40, ry: 0.45, sp: 0.06, ph: 1.5,  a: 0.38 },
+  ];
+
+  function drawBliks(t) {
+    const W = bCanvas.width, H = bCanvas.height;
+    bCtx.clearRect(0, 0, W, H);
+
+    // multiply затемняет фон — блики видны как более тёмные/насыщенные пятна
+    bCtx.globalCompositeOperation = 'multiply';
+
+    // Плавающие пятна — слегка тонированные, как отражение RGB-пикселей
+    BLOBS.forEach(b => {
+      const cx = W * (b.fx + Math.sin(t * b.sp + b.ph) * 0.14 + scrollPhase * 0.02);
+      const cy = H * (b.fy + Math.cos(t * b.sp * 0.7 + b.ph) * 0.11 + scrollPhase * 0.01);
+      const rw = W * b.rx, rh = H * b.ry;
+      const flicker = 0.8 + Math.sin(t * 13.7 + b.ph) * 0.2;
+
+      bCtx.save();
+      bCtx.translate(cx, cy);
+      bCtx.scale(1, rh / rw);
+      const g = bCtx.createRadialGradient(0, 0, 0, 0, 0, rw);
+      // тонированные пятна: тёплый/холодный оттенок
+      const warm = b.ph % 2 < 1;
+      const c0 = warm ? `rgba(210,200,230,${(b.a * flicker).toFixed(3)})` : `rgba(200,215,235,${(b.a * flicker).toFixed(3)})`;
+      const c1 = warm ? `rgba(225,215,240,${(b.a * 0.4 * flicker).toFixed(3)})` : `rgba(215,228,245,${(b.a * 0.4 * flicker).toFixed(3)})`;
+      g.addColorStop(0,   c0);
+      g.addColorStop(0.6, c1);
+      g.addColorStop(1,   'rgba(245,245,245,0)');
+      bCtx.fillStyle = g;
+      bCtx.beginPath();
+      bCtx.arc(0, 0, rw, 0, Math.PI * 2);
+      bCtx.fill();
+      bCtx.restore();
+    });
+
+    bCtx.globalCompositeOperation = 'source-over';
+  }
+
+  // ── Canvas перспективы ──
+  const pCanvas = document.getElementById('persp-canvas');
+  const pCtx    = pCanvas.getContext('2d');
+  const perspOffsets = rows.map(() => 0); // смещение текста на каждой из 8 линий
+
+  function resizePersp() {
+    pCanvas.width  = window.innerWidth;
+    pCanvas.height = window.innerHeight;
+  }
+  resizePersp();
+  window.addEventListener('resize', () => { fillAll(); resizeBliks(); resizePersp(); });
+
+  // Рисует бегущий текст вдоль линии с перспективным уменьшением
+  function drawPerspLine(x1, y1, x2, y2, text, offset) {
+    const dx  = x2 - x1, dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const ang = Math.atan2(dy, dx);
+
+    pCtx.save();
+    pCtx.translate(x1, y1);
+    pCtx.rotate(ang);
+
+    const unit = text + '   ·   ';
+    pCtx.font = '300 14px Segoe UI, sans-serif';
+    const unitW = pCtx.measureText(unit).width;
+
+    let x = -((offset % unitW + unitW) % unitW);
+    while (x < len) {
+      const t     = Math.max(0, x / len);          // 0=спереди 1=VP
+      const scale = Math.max(0.04, 1 - t * 0.88);  // текст уменьшается к VP
+      const alpha = Math.max(0, (1 - t) * 0.45);
+      if (x > -unitW && alpha > 0.005) {
+        pCtx.save();
+        pCtx.translate(x, 0);
+        pCtx.scale(scale, scale);
+        pCtx.globalAlpha = alpha;
+        pCtx.fillText(unit, 0, 0);
+        pCtx.restore();
+      }
+      x += unitW;
+    }
+    pCtx.restore();
+  }
+
+  function drawPerspCanvas(mult) {
+    pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+    const W  = pCanvas.width, H = pCanvas.height;
+    const vx = W / 2, vy = H / 2;
+
+    pCtx.fillStyle = 'rgba(0,0,0,0.82)';
+
+    rows.forEach((row, i) => {
+      const rect = row.getBoundingClientRect();
+      const ry   = rect.top + rect.height / 2;
+      const text = row.dataset.i18n ? I18N.t(row.dataset.i18n) : row.dataset.text;
+      if (!text) return;
+
+      // линия слева и справа от строки к точке схода
+      pCtx.strokeStyle = 'rgba(0,0,0,0.09)';
+      pCtx.lineWidth   = 0.6;
+      pCtx.beginPath(); pCtx.moveTo(0, ry); pCtx.lineTo(vx, vy); pCtx.stroke();
+      pCtx.beginPath(); pCtx.moveTo(W, ry); pCtx.lineTo(vx, vy); pCtx.stroke();
+
+      // левая: наружу (от VP к краю) — обратный offset → замкнутый поток по кругу
+      drawPerspLine(0, ry, vx, vy, text, -perspOffsets[i]);
+      // правая: внутрь (от края к VP)
+      drawPerspLine(W, ry, vx, vy, text,  perspOffsets[i]);
+
+      // сдвигаем со знаком scrollDir — направление меняется со скролом
+      perspOffsets[i] += scrollDir * BASE[i] * mult * 30;
+    });
+  }
+
+  document.querySelector('[data-href]').addEventListener('click', e => {
+    location.href = e.currentTarget.dataset.href;
+  });
+
+  // ── JS-тикер со скролл-ускорением ──
+  const BASE   = rows.map(r => parseFloat(r.dataset.speed));
+  const DIR    = rows.map(r => parseInt(r.dataset.dir));
+  const px     = rows.map(() => 0); // пиксельное смещение
+  const paused = rows.map(() => false);
+
+  let boost     = 0;
+  let scrollDir = 1;  // направление скрола: 1 = вниз, -1 = вверх
+  let lastTime  = performance.now();
+
+  rows.forEach((row, i) => {
+    row.addEventListener('mouseenter', () => { paused[i] = true; });
+    row.addEventListener('mouseleave', () => { paused[i] = false; });
+  });
+
+  function tick(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    boost *= 0.92;
+    const mult = 1 + boost * 15;
+
+    rows.forEach((row, i) => {
+      const inner = row.querySelector('.ticker-inner');
+      if (!inner || !inner.children.length || paused[i]) return;
+      // Половина реальной ширины — граница бесшовного цикла
+      const half = inner.scrollWidth / 2;
+      if (!half) return;
+      px[i] = (px[i] + scrollDir * BASE[i] * half * mult * dt + half) % half;
+      inner.style.transform = `translateX(-${px[i]}px)`;
+    });
+
+    drawBliks(now / 1000);
+    drawPerspCanvas(mult);
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function addBoost(d) {
+    if (Math.abs(d) > 0.5) scrollDir = d > 0 ? 1 : -1;
+    boost = Math.min(1, boost + Math.abs(d) * 0.010);
+    scrollPhase += d * 0.003;
+  }
+
+  window.addEventListener('wheel', e => addBoost(e.deltaY), { passive: true });
+
+  let touchY = 0;
+  window.addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
+  window.addEventListener('touchmove',  e => {
+    const dy = touchY - e.touches[0].clientY;
+    touchY = e.touches[0].clientY;
+    addBoost(dy * 3);
+  }, { passive: true });
+</script>
+</body>
+</html>
