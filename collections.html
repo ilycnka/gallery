@@ -90,10 +90,10 @@
 
 <canvas id="bliks-canvas"></canvas>
 <canvas id="persp-canvas"></canvas>
-<a id="back" href="index.html"></a>
+<a id="back" href="index"></a>
 
 <div id="lines">
-  <div class="ticker-row" data-dir="-1" data-speed="0.071" data-href="gallery.html" data-text="Bangkok in Graphite — March 2026" style="cursor:pointer;"></div>
+  <div class="ticker-row" data-dir="-1" data-speed="0.071" data-href="gallery" data-text="Bangkok in Graphite" style="cursor:pointer;"></div>
   <div class="ticker-row" data-dir="1"  data-speed="0.045" data-i18n="coming_soon"></div>
   <div class="ticker-row" data-dir="-1" data-speed="0.111" data-i18n="coming_not_soon"></div>
   <div class="ticker-row" data-dir="1"  data-speed="0.071" data-i18n="coming_not_soon"></div>
@@ -208,7 +208,7 @@
     pCtx.font = '300 14px Segoe UI, sans-serif';
     const unitW = pCtx.measureText(unit).width;
 
-    let x = -(offset % unitW);
+    let x = -((offset % unitW + unitW) % unitW);
     while (x < len) {
       const t     = Math.max(0, x / len);          // 0=спереди 1=VP
       const scale = Math.max(0.04, 1 - t * 0.88);  // текст уменьшается к VP
@@ -245,12 +245,13 @@
       pCtx.beginPath(); pCtx.moveTo(0, ry); pCtx.lineTo(vx, vy); pCtx.stroke();
       pCtx.beginPath(); pCtx.moveTo(W, ry); pCtx.lineTo(vx, vy); pCtx.stroke();
 
-      // бегущий текст вдоль обеих линий
-      drawPerspLine(0, ry, vx, vy, text, perspOffsets[i]);
-      drawPerspLine(W, ry, vx, vy, text, perspOffsets[i]);
+      // левая: наружу (от VP к краю) — обратный offset → замкнутый поток по кругу
+      drawPerspLine(0, ry, vx, vy, text, -perspOffsets[i]);
+      // правая: внутрь (от края к VP)
+      drawPerspLine(W, ry, vx, vy, text,  perspOffsets[i]);
 
-      // сдвигаем смещение синхронно со скоростью строки
-      perspOffsets[i] += BASE[i] * mult * 30;
+      // сдвигаем со знаком scrollDir — направление меняется со скролом
+      perspOffsets[i] += scrollDir * BASE[i] * mult * 30;
     });
   }
 
@@ -286,7 +287,7 @@
       // Половина реальной ширины — граница бесшовного цикла
       const half = inner.scrollWidth / 2;
       if (!half) return;
-      px[i] = (px[i] + DIR[i] * scrollDir * BASE[i] * half * mult * dt + half) % half;
+      px[i] = (px[i] + scrollDir * BASE[i] * half * mult * dt + half) % half;
       inner.style.transform = `translateX(-${px[i]}px)`;
     });
 
