@@ -148,7 +148,7 @@
 <script>
   // ── Хаотичная wireframe-фигура ──
   const canvas   = document.getElementById('scene-canvas');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setClearColor(0x000000, 0);
 
@@ -238,7 +238,7 @@
 
   (function () {
     const isMob = window.innerWidth < 768;
-    const N     = isMob ? 3000 : 60000;
+    const N     = isMob ? 2000 : 12000;
     const R_MAX = 30;
     const pos   = new Float32Array(N * 3);
     const col   = new Float32Array(N * 3);

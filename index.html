@@ -51,21 +51,22 @@ scene.background = new THREE.Color(0xffffff);
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 300);
 camera.position.set(0, 0, 9);
 
-const renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
+const renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
-// ─── Волновые частицы ───
-const PCOUNT = isMobile ? 8000 : 40000;
+// ─── Волновые частицы (GPU-анимация, нет обновлений буфера каждый кадр) ───
+const PCOUNT = isMobile ? 5000 : 20000;
 const waveGeo = new THREE.BufferGeometry();
 const wPos = new Float32Array(PCOUNT * 3);
 
 for (let i = 0; i < PCOUNT; i++) {
   wPos[i*3]   = (Math.random() - 0.5) * 46;
   wPos[i*3+1] = (Math.random() - 0.5) * 30;
-  wPos[i*3+2] = (Math.random() - 0.5) * 30 + 9;
+  wPos[i*3+2] = (Math.random() - 0.5) * 30 + 9;  // начальная Z: -6..24
 }
+waveGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3));
 
 function makeParticleTex() {
   const c = document.createElement('canvas');
@@ -81,14 +82,37 @@ function makeParticleTex() {
   return new THREE.CanvasTexture(c);
 }
 
-waveGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3));
-scene.add(new THREE.Points(waveGeo, new THREE.PointsMaterial({
-  map: makeParticleTex(),
-  size: isMobile ? 0.055 : 0.036,
-  transparent: true, opacity: 0.55,
-  alphaTest: 0.01,
-  sizeAttenuation: true, depthWrite: false,
-})));
+// Шейдер вычисляет Z-позицию по времени — нулевая нагрузка на CPU в анимации
+const particleMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uTime: { value: 0 },
+    uMap:  { value: makeParticleTex() },
+    uSize: { value: isMobile ? 0.055 : 0.036 },
+  },
+  vertexShader: `
+    uniform float uTime;
+    uniform float uSize;
+    void main() {
+      vec3 pos = position;
+      // Зацикленное движение по Z: от -12 до 24 (диапазон 36)
+      pos.z = mod(position.z + uTime * 6.48 + 12.0, 36.0) - 12.0;
+      vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = uSize * projectionMatrix[1][1] * 450.0 / max(0.1, -mvPos.z);
+      gl_Position = projectionMatrix * mvPos;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D uMap;
+    void main() {
+      vec4 col = texture2D(uMap, gl_PointCoord);
+      if (col.a < 0.01) discard;
+      gl_FragColor = vec4(col.rgb, col.a * 0.55);
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+});
+scene.add(new THREE.Points(waveGeo, particleMat));
 
 // ─── Текстура надписи ───
 function createNavTexture(text, opacity, w, h) {
@@ -277,13 +301,8 @@ function animate() {
   camera.rotation.y = -mouse.x * 0.05;
   camera.rotation.x =  mouse.y * 0.04;
 
-  // Частицы летят на зрителя
-  const wp = waveGeo.attributes.position.array;
-  for (let i = 0; i < PCOUNT; i++) {
-    wp[i*3+2] += 0.108;
-    if (wp[i*3+2] > 24) wp[i*3+2] -= 36;
-  }
-  waveGeo.attributes.position.needsUpdate = true;
+  // Передаём время в шейдер частиц (движение на GPU)
+  particleMat.uniforms.uTime.value = t;
 
   // Инерция вращения треугольника
   if (!isDragging) {

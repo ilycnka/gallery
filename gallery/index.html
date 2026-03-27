@@ -144,7 +144,7 @@ const camera   = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 
 camera.position.set(0, 2, 14);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile, powerPreference: 'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setClearColor(0xffffff, 1);
