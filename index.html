@@ -87,7 +87,7 @@ const particleMat = new THREE.ShaderMaterial({
   uniforms: {
     uTime:  { value: 0 },
     uMap:   { value: makeParticleTex() },
-    uSize:  { value: isMobile ? 0.055 : 0.036 },
+    uSize:  { value: isMobile ? 0.022 : 0.036 },
     uSpeed: { value: isMobile ? 18.0 : 6.48 },
   },
   vertexShader: `
@@ -118,9 +118,12 @@ scene.add(new THREE.Points(waveGeo, particleMat));
 
 // ─── Текстура надписи ───
 function createNavTexture(text, opacity, w, h) {
+  // Учитываем DPR для чёткого текста на ретина-экранах
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const c = document.createElement('canvas');
-  c.width = w; c.height = h;
+  c.width = w * dpr; c.height = h * dpr;
   const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, w, h);
   let size = Math.round(h * 0.58);
   ctx.font = `100 ${size}px Inter, sans-serif`;
