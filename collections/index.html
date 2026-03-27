@@ -115,7 +115,7 @@
 
   const rows = Array.from(document.querySelectorAll('.ticker-row'));
 
-  function fillRow(row) {
+  function fillRow(row, attempt = 0) {
     const text = row.dataset.i18n ? I18N.t(row.dataset.i18n) : row.dataset.text;
     if (!text) return;
     const probe = document.createElement('span');
@@ -124,7 +124,7 @@
     document.body.appendChild(probe);
     const w = probe.getBoundingClientRect().width;
     probe.remove();
-    if (!w) { requestAnimationFrame(() => fillRow(row)); return; }
+    if (!w && attempt < 20) { requestAnimationFrame(() => fillRow(row, attempt + 1)); return; }
     let count = Math.ceil(window.innerWidth * 2.4 / w);
     if (count % 2 !== 0) count++;
     if (count < 4) count = 4;
@@ -192,12 +192,20 @@
   const pCtx    = pCanvas.getContext('2d');
   const perspOffsets = rows.map(() => 0); // смещение текста на каждой из 8 линий
 
+  // Кэш Y-позиций строк — не читаем getBoundingClientRect каждый кадр
+  let rowYCache = [];
+  function cacheRowY() {
+    rowYCache = rows.map(r => { const rc = r.getBoundingClientRect(); return rc.top + rc.height / 2; });
+  }
+
   function resizePersp() {
     pCanvas.width  = window.innerWidth;
     pCanvas.height = window.innerHeight;
+    cacheRowY();
   }
   resizePersp();
   window.addEventListener('resize', () => { fillAll(); resizeBliks(); resizePersp(); });
+  setTimeout(cacheRowY, 50); // после layout
 
   // Рисует бегущий текст вдоль линии с перспективным уменьшением
   function drawPerspLine(x1, y1, x2, y2, text, offset) {
@@ -239,8 +247,7 @@
     pCtx.fillStyle = 'rgba(0,0,0,0.82)';
 
     rows.forEach((row, i) => {
-      const rect = row.getBoundingClientRect();
-      const ry   = rect.top + rect.height / 2;
+      const ry   = rowYCache[i] || 0;
       const text = row.dataset.i18n ? I18N.t(row.dataset.i18n) : row.dataset.text;
       if (!text) return;
 
@@ -267,7 +274,6 @@
   // ── JS-тикер со скролл-ускорением ──
   const isMobile = window.innerWidth < 768;
   const BASE   = rows.map(r => parseFloat(r.dataset.speed));
-  const DIR    = rows.map(r => parseInt(r.dataset.dir));
   const px     = rows.map(() => 0); // пиксельное смещение
   const paused = rows.map(() => false);
   // Кэш half чтобы не читать scrollWidth каждый кадр (layout thrashing)

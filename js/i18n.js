@@ -61,19 +61,20 @@
     },
   };
 
-  let _lang = sessionStorage.getItem('vw_lang') || 'en';
+  const _stored = sessionStorage.getItem('vw_lang');
+  let _lang = (_stored === 'en' || _stored === 'ru') ? _stored : 'en';
   document.documentElement.lang = _lang;
 
   window.I18N = {
     get lang() { return _lang; },
 
     t(key) {
-      return DICT[_lang][key] ?? DICT.ru[key] ?? key;
+      return DICT[_lang][key] ?? DICT.en[key] ?? key;
     },
 
     // Для ключей-функций: I18N.tf('works_available', 5)
     tf(key, ...args) {
-      const v = DICT[_lang][key] ?? DICT.ru[key];
+      const v = DICT[_lang][key] ?? DICT.en[key];
       return typeof v === 'function' ? v(...args) : v;
     },
 

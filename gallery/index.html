@@ -602,6 +602,7 @@ window.addEventListener('resize', () => {
 });
 
 const infoTitle = document.getElementById('info-title');
+const infoSale  = document.getElementById('info-sale');
 let _lastFrontIdx = -1;
 
 const clock = new THREE.Clock();
@@ -616,10 +617,9 @@ const clock = new THREE.Clock();
   const frontIdx = ((Math.round(stackT) % N) + N) % N;
   if (frontIdx !== _lastFrontIdx) {
     _lastFrontIdx = frontIdx;
-    infoTitle.textContent = WORKS[frontIdx].title;
-    const sale = document.getElementById('info-sale');
     const w = WORKS[frontIdx];
-    sale.textContent = w.owner ? w.owner : 'on sale';
+    infoTitle.textContent = w.title;
+    infoSale.textContent  = w.owner ? w.owner : 'on sale';
   }
   const carouselAngle = stackT * (2 * Math.PI / N);
 
