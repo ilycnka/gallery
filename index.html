@@ -57,7 +57,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
 // ─── Волновые частицы (GPU-анимация, нет обновлений буфера каждый кадр) ───
-const PCOUNT = isMobile ? 14000 : 20000;
+const PCOUNT = isMobile ? 30000 : 20000;
 const waveGeo = new THREE.BufferGeometry();
 const wPos = new Float32Array(PCOUNT * 3);
 
