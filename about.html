@@ -70,6 +70,23 @@
       margin: 48px 0;
     }
 
+    .btn-support {
+      display: inline-block;
+      margin-top: 48px;
+      padding: 14px 36px;
+      border: 1px solid rgba(255,255,255,0.22);
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.70);
+      text-decoration: none;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-support:hover {
+      border-color: rgba(255,255,255,0.60);
+      color: rgba(255,255,255,1.0);
+    }
+
     .socials {
       display: flex;
       gap: 28px;
@@ -112,6 +129,8 @@
   <p class="body-text" id="text2"></p>
   <p class="body-text" id="text3" style="font-weight:700; margin-top:1.4em;"></p>
 
+  <a class="btn-support" href="https://t.me/ilycnka" target="_blank" rel="noopener" id="btn-support"></a>
+
   <div class="socials">
     <a href="https://t.me/ilycnka" target="_blank" rel="noopener">tg</a>
     <a href="https://instagram.com/ilycnka" target="_blank" rel="noopener">instagram</a>
@@ -126,18 +145,20 @@
 
   const CONTENT = {
     en: {
-      back:  '← back',
-      title: 'online gallery\nvoidwall',
-      text1: 'my name is ilya i am 24 i grew up in minsk belarus built a career in it moved to asia and for the last year i have been living in bangkok love travelling space dinosaurs cats and drawing',
-      text2: 'here i build virtual spaces where i put my drawings',
-      text3: 'in return for your support i place your name on available works',
+      back:    '← back',
+      title:   'online gallery\nvoidwall',
+      text1:   'my name is ilya i am 24 i grew up in minsk belarus built a career in it moved to asia and for the last year i have been living in bangkok love travelling space dinosaurs cats and drawing',
+      text2:   'here i build virtual spaces where i put my drawings',
+      text3:   'in return for your support i place your name on available works',
+      support: 'support the project',
     },
     ru: {
-      back:  '← назад',
-      title: 'онлайн галерея\nvoidwall',
-      text1: 'меня зовут илья мне 24 я вырос в минске беларусь построил карьеру в ит переехал в азию и последний год живу в бангкоке люблю путешествовать космос динозавров котов и рисовать',
-      text2: 'здесь я создаю виртуальные пространства где выставляю свои рисунки',
-      text3: 'за поддержку я размещаю ваше имя на свободных работах',
+      back:    '← назад',
+      title:   'онлайн галерея\nvoidwall',
+      text1:   'меня зовут илья мне 24 я вырос в минске беларусь построил карьеру в ит переехал в азию и последний год живу в бангкоке люблю путешествовать космос динозавров котов и рисовать',
+      text2:   'здесь я создаю виртуальные пространства где выставляю свои рисунки',
+      text3:   'за поддержку я размещаю ваше имя на свободных работах',
+      support: 'поддержать проект',
     },
   };
 
@@ -145,10 +166,10 @@
     const c = CONTENT[I18N.lang] || CONTENT.en;
     document.getElementById('back').textContent  = c.back;
     document.getElementById('title').textContent = c.title;
-    document.getElementById('text1').textContent = c.text1;
-    document.getElementById('text2').textContent = c.text2;
-    document.getElementById('text3').textContent = c.text3;
-    // meta element removed — nothing to render
+    document.getElementById('text1').textContent    = c.text1;
+    document.getElementById('text2').textContent    = c.text2;
+    document.getElementById('text3').textContent    = c.text3;
+    document.getElementById('btn-support').textContent = c.support;
     document.documentElement.lang = I18N.lang;
   }
 
