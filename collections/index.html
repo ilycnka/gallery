@@ -85,6 +85,10 @@
       .ticker-row:hover .ticker-inner { animation-play-state: paused; }
       .ticker-row:hover { transform: scaleY(1.35); }
     }
+    @media (max-width: 767px) {
+      /* blur дорогой на мобиле — скрываем */
+      #bliks-canvas { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -261,10 +265,23 @@
   });
 
   // ── JS-тикер со скролл-ускорением ──
+  const isMobile = window.innerWidth < 768;
   const BASE   = rows.map(r => parseFloat(r.dataset.speed));
   const DIR    = rows.map(r => parseInt(r.dataset.dir));
   const px     = rows.map(() => 0); // пиксельное смещение
   const paused = rows.map(() => false);
+  // Кэш half чтобы не читать scrollWidth каждый кадр (layout thrashing)
+  const halfCache = rows.map(() => 0);
+
+  function updateHalfCache() {
+    rows.forEach((row, i) => {
+      const inner = row.querySelector('.ticker-inner');
+      if (inner) halfCache[i] = inner.scrollWidth / 2;
+    });
+  }
+  // Обновляем после fillAll и при ресайзе
+  setTimeout(updateHalfCache, 100);
+  window.addEventListener('resize', updateHalfCache);
 
   let boost     = 0;
   let scrollDir = 1;  // направление скрола: 1 = вниз, -1 = вверх
@@ -283,16 +300,14 @@
     const mult = 1 + boost * 15;
 
     rows.forEach((row, i) => {
-      const inner = row.querySelector('.ticker-inner');
-      if (!inner || !inner.children.length || paused[i]) return;
-      // Половина реальной ширины — граница бесшовного цикла
-      const half = inner.scrollWidth / 2;
-      if (!half) return;
+      const half = halfCache[i];
+      if (!half || paused[i]) return;
       px[i] = (px[i] + scrollDir * BASE[i] * half * mult * dt + half) % half;
-      inner.style.transform = `translateX(-${px[i]}px)`;
+      // translate3d форсирует GPU-слой для плавности
+      row.querySelector('.ticker-inner').style.transform = `translate3d(-${px[i]}px,0,0)`;
     });
 
-    drawBliks(now / 1000);
+    if (!isMobile) drawBliks(now / 1000);
     drawPerspCanvas(mult);
 
     requestAnimationFrame(tick);
