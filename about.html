@@ -70,13 +70,20 @@
       margin: 48px 0;
     }
 
-    .meta {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.25);
-      line-height: 2.2;
+    .socials {
+      display: flex;
+      gap: 28px;
+      margin-top: 56px;
     }
+    .socials a {
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.28);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .socials a:hover { color: rgba(255,255,255,0.75); }
 
     #scene-canvas {
       position: fixed;
@@ -105,6 +112,11 @@
   <p class="body-text" id="text2"></p>
   <p class="body-text" id="text3" style="font-weight:700; margin-top:1.4em;"></p>
 
+  <div class="socials">
+    <a href="https://t.me/ilycnka" target="_blank" rel="noopener">tg</a>
+    <a href="https://instagram.com/ilycnka" target="_blank" rel="noopener">instagram</a>
+    <a href="https://tiktok.com/@ilycnka" target="_blank" rel="noopener">tiktok</a>
+  </div>
 
 </main>
 
