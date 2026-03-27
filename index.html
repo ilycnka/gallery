@@ -163,9 +163,10 @@ function rebuildNavTextures() {
     mesh.material.needsUpdate = true;
   });
 }
-document.fonts.load('100 44px Inter').then(() => {
-  document.fonts.load('300 44px Inter').then(rebuildNavTextures);
-});
+// Перестраиваем текстуры когда шрифты загружены
+document.fonts.ready.then(rebuildNavTextures);
+// Фолбэк на случай если ready не сработал вовремя
+setTimeout(rebuildNavTextures, 800);
 window.addEventListener('langchange', rebuildNavTextures);
 
 // ─── Вращение треугольника ───

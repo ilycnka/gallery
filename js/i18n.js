@@ -2,7 +2,7 @@
 (function () {
   const DICT = {
     ru: {
-      nav_collections: 'выбрать коллекцию',
+      nav_collections: 'коллекции',
       gyro_allow:      '🔄 Разрешить гироскоп',
       gyro_enable:     '🔄 Включить гироскоп',
       back:            '← назад',
@@ -27,11 +27,11 @@
       works_available: (n) => `${n} работ доступно`,
       coming_soon:     'Скоро',
       coming_not_soon: 'Не скоро',
-      nav_about:       'о проекте',
-      nav_acquire:     'поддержать проект',
+      nav_about:       'проект',
+      nav_acquire:     'поддержать',
     },
     en: {
-      nav_collections: 'select collection',
+      nav_collections: 'collections',
       gyro_allow:      '🔄 Allow gyroscope',
       gyro_enable:     '🔄 Enable gyroscope',
       back:            '← back',
@@ -57,7 +57,7 @@
       coming_soon:     'coming soon',
       coming_not_soon: 'coming not soon',
       nav_about:       'about',
-      nav_acquire:     'support the project',
+      nav_acquire:     'support',
     },
   };
 
