@@ -114,7 +114,7 @@
 
 <div id="info-panel">
   <div id="info-title"></div>
-  <div id="info-sale">you can be a part of it</div>
+  <div id="info-sale"><!-- set by JS --></div>
 </div>
 
 <div id="popup">
@@ -123,7 +123,7 @@
     <img id="popup-img" src="" alt="" />
     <div id="popup-title"></div>
     <div id="popup-meta"></div>
-    <div id="popup-sale">you can be a part of it</div>
+    <div id="popup-sale"><!-- set by JS --></div>
   </div>
 </div>
 
@@ -134,6 +134,8 @@ const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || 
 I18N.addToggle('light');
 document.getElementById('back').textContent = '← ' + I18N.t('back');
 window.addEventListener('langchange', () => {
+  const _is = document.getElementById('info-sale'); if (_is && !_is.dataset.owner) _is.textContent = I18N.t('for_sale');
+  const _ps = document.getElementById('popup-sale'); if (_ps && !_ps.dataset.owner) _ps.textContent = I18N.t('for_sale');
   document.getElementById('back').textContent = '← ' + I18N.t('back');
 });
 
@@ -232,7 +234,7 @@ function openPopup(work) {
   popupImg.alt     = work.title;
   popupTitle.textContent = work.title;
   popupMeta.textContent  = work.meta;
-  document.getElementById('popup-sale').textContent = work.owner ? work.owner : 'you can be a part of it';
+  document.getElementById('popup-sale').textContent = work.owner ? work.owner : I18N.t('for_sale');
   popup.classList.add('open');
 }
 function closePopup() { popup.classList.remove('open'); }
@@ -619,7 +621,7 @@ const clock = new THREE.Clock();
     _lastFrontIdx = frontIdx;
     const w = WORKS[frontIdx];
     infoTitle.textContent = w.title;
-    infoSale.textContent  = w.owner ? w.owner : 'you can be a part of it';
+    infoSale.textContent  = w.owner ? w.owner : I18N.t('for_sale');
   }
   const carouselAngle = stackT * (2 * Math.PI / N);
 
