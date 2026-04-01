@@ -114,7 +114,7 @@
 
 <div id="info-panel">
   <div id="info-title"></div>
-  <div id="info-sale">on sale</div>
+  <div id="info-sale">you can be a part of it</div>
 </div>
 
 <div id="popup">
@@ -123,7 +123,7 @@
     <img id="popup-img" src="" alt="" />
     <div id="popup-title"></div>
     <div id="popup-meta"></div>
-    <div id="popup-sale">on sale</div>
+    <div id="popup-sale">you can be a part of it</div>
   </div>
 </div>
 
@@ -232,7 +232,7 @@ function openPopup(work) {
   popupImg.alt     = work.title;
   popupTitle.textContent = work.title;
   popupMeta.textContent  = work.meta;
-  document.getElementById('popup-sale').textContent = work.owner ? work.owner : 'on sale';
+  document.getElementById('popup-sale').textContent = work.owner ? work.owner : 'you can be a part of it';
   popup.classList.add('open');
 }
 function closePopup() { popup.classList.remove('open'); }
@@ -619,7 +619,7 @@ const clock = new THREE.Clock();
     _lastFrontIdx = frontIdx;
     const w = WORKS[frontIdx];
     infoTitle.textContent = w.title;
-    infoSale.textContent  = w.owner ? w.owner : 'on sale';
+    infoSale.textContent  = w.owner ? w.owner : 'you can be a part of it';
   }
   const carouselAngle = stackT * (2 * Math.PI / N);
 
