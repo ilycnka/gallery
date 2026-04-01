@@ -566,16 +566,16 @@ window.addEventListener('wheel', e => {
   stackTTarget += e.deltaY * 0.005;
 }, { passive: true });
 
-// Свайп вверх — следующая работа, вниз — предыдущая
-let _touchScrollY = null;
+// Свайп влево/вправо — следующая/предыдущая работа
+let _touchScrollX = null;
 window.addEventListener('touchmove', e => {
   if (popup.classList.contains('open')) return;
-  if (_touchScrollY === null) { _touchScrollY = e.touches[0].clientY; return; }
-  const dy = _touchScrollY - e.touches[0].clientY;
-  stackTTarget += dy * 0.01;
-  _touchScrollY = e.touches[0].clientY;
+  if (_touchScrollX === null) { _touchScrollX = e.touches[0].clientX; return; }
+  const dx = _touchScrollX - e.touches[0].clientX;
+  stackTTarget += dx * 0.012;
+  _touchScrollX = e.touches[0].clientX;
 }, { passive: true });
-window.addEventListener('touchend', () => { _touchScrollY = null; }, { passive: true });
+window.addEventListener('touchend', () => { _touchScrollX = null; }, { passive: true });
 
 // Гироскоп для параллакса на мобильном
 if (isMobile && window.DeviceOrientationEvent) {
