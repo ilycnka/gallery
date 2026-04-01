@@ -59,7 +59,7 @@
       coming_not_soon: 'coming not soon',
       nav_about:       'about',
       nav_acquire:     'support',
-      for_sale:        'you can be a part of it',
+      for_sale:        'you can become a part of the collection',
     },
   };
 
