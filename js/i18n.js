@@ -3,7 +3,7 @@
   const DICT = {
     ru: {
       nav_collections: 'коллекции',
-      nav_play:        'играть',
+      nav_play:        'game',
       gyro_allow:      '🔄 Разрешить гироскоп',
       gyro_enable:     '🔄 Включить гироскоп',
       back:            '← назад',
