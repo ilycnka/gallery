@@ -15,46 +15,37 @@
       font-family: 'Segoe UI', sans-serif;
     }
     #video {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       width: 100%; height: 100%;
-      object-fit: cover;
-      display: block;
+      object-fit: cover; display: block;
       transform: scaleX(-1);
     }
     #overlay {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       width: 100%; height: 100%;
-      z-index: 3;
-      pointer-events: none;
+      z-index: 3; pointer-events: none;
       transform: scaleX(-1);
     }
     #back {
-      position: fixed;
-      top: 22px; left: 22px; z-index: 10;
-      font-size: 11px;
-      color: rgba(255,255,255,0.35);
-      letter-spacing: 0.10em;
-      text-decoration: none;
-      transition: color 0.2s;
+      position: fixed; top: 22px; left: 22px; z-index: 10;
+      font-size: 11px; color: rgba(255,255,255,0.35);
+      letter-spacing: 0.10em; text-decoration: none; transition: color 0.2s;
     }
     #back:hover { color: rgba(255,255,255,0.80); }
+
     #live-badge {
-      position: fixed;
-      top: 22px; right: 22px; z-index: 10;
+      position: fixed; top: 22px; right: 22px; z-index: 10;
       display: flex; align-items: center; gap: 7px;
       font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase;
-      color: rgba(255,255,255,0.40);
-      opacity: 0; transition: opacity 0.6s;
+      color: rgba(255,255,255,0.40); opacity: 0; transition: opacity 0.6s;
     }
     #live-badge.visible { opacity: 1; }
     #live-dot {
       width: 6px; height: 6px; border-radius: 50%;
-      background: #fff;
-      animation: pulse 2s ease-in-out infinite;
+      background: #fff; animation: pulse 2s ease-in-out infinite;
     }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
     #message {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
@@ -64,6 +55,27 @@
       font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
       color: rgba(255,255,255,0.22);
     }
+
+    /* ── Панель пальцев ── */
+    #finger-info {
+      position: fixed;
+      top: 60px; left: 20px;
+      z-index: 10;
+      pointer-events: none;
+      font-family: 'SF Mono', 'Fira Mono', monospace;
+      font-size: 10px;
+      line-height: 2;
+      color: rgba(255,255,255,0.55);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #finger-info.visible { opacity: 1; }
+    #finger-info .row { display: flex; gap: 10px; align-items: baseline; }
+    #finger-info .fn  { color: rgba(255,255,255,0.28); width: 10px; }
+    #finger-info .axis-x { color: rgba(255,110,110,0.90); }
+    #finger-info .axis-y { color: rgba(110,210,110,0.90); }
+    #finger-info .axis-z { color: rgba(110,160,255,0.90); }
+    #finger-info b { font-weight: 600; color: rgba(255,255,255,0.85); }
   </style>
 </head>
 <body>
@@ -75,6 +87,15 @@
 <div id="live-badge"><div id="live-dot"></div><span>live</span></div>
 <div id="message"><span id="msg-text">opening camera</span></div>
 
+<!-- Панель координат пальцев -->
+<div id="finger-info">
+  <div class="row"><span class="fn">1</span><span class="axis-x">x —</span><span class="axis-y">y —</span><span class="axis-z">z —</span></div>
+  <div class="row"><span class="fn">2</span><span class="axis-x">x —</span><span class="axis-y">y —</span><span class="axis-z">z —</span></div>
+  <div class="row"><span class="fn">3</span><span class="axis-x">x —</span><span class="axis-y">y —</span><span class="axis-z">z —</span></div>
+  <div class="row"><span class="fn">4</span><span class="axis-x">x —</span><span class="axis-y">y —</span><span class="axis-z">z —</span></div>
+  <div class="row"><span class="fn">5</span><span class="axis-x">x —</span><span class="axis-y">y —</span><span class="axis-z">z —</span></div>
+</div>
+
 <script src="../js/i18n.js?v=4"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 <script>
@@ -83,16 +104,93 @@ window.addEventListener('langchange', () => {
   document.getElementById('back').textContent = I18N.t('back');
 });
 
-const video   = document.getElementById('video');
-const overlay = document.getElementById('overlay');
-const ctx     = overlay.getContext('2d');
-const badge   = document.getElementById('live-badge');
-const message = document.getElementById('message');
-const msgText = document.getElementById('msg-text');
+const video      = document.getElementById('video');
+const overlay    = document.getElementById('overlay');
+const ctx        = overlay.getContext('2d');
+const badge      = document.getElementById('live-badge');
+const message    = document.getElementById('message');
+const msgText    = document.getElementById('msg-text');
+const fingerInfo = document.getElementById('finger-info');
+const infoRows   = fingerInfo.querySelectorAll('.row');
 
 function resizeOverlay() { overlay.width = window.innerWidth; overlay.height = window.innerHeight; }
 resizeOverlay();
 window.addEventListener('resize', resizeOverlay);
+
+// ── Рисует читаемый текст на зеркальном канвасе ──
+function drawLabel(text, cx, cy, color, align = 'center') {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(-1, 1);
+  ctx.fillStyle = color;
+  ctx.textAlign  = align === 'left' ? 'right' : align === 'right' ? 'left' : 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+// ── 3D-проекция (перспектива) ──
+function rot3([x,y,z], rx, ry) {
+  // Y
+  let nx = x*Math.cos(ry)+z*Math.sin(ry), nz = -x*Math.sin(ry)+z*Math.cos(ry);
+  x = nx; z = nz;
+  // X
+  let ny = y*Math.cos(rx)-z*Math.sin(rx); nz = y*Math.sin(rx)+z*Math.cos(rx);
+  y = ny; z = nz;
+  return [x, y, z];
+}
+function persp([x,y,z], cx, cy) {
+  const f = 280 / (280 + z);
+  return [cx + x*f, cy + y*f];
+}
+
+// ── Оси координат ──
+const AX_LEN = 55;
+const AX_RX  = -0.42, AX_RY = 0.60; // фиксированный угол просмотра осей
+
+function drawArrowHead(x0, y0, x1, y1) {
+  const a = Math.atan2(y1-y0, x1-x0), s = 8;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - s*Math.cos(a-0.4), y1 - s*Math.sin(a-0.4));
+  ctx.lineTo(x1 - s*Math.cos(a+0.4), y1 - s*Math.sin(a+0.4));
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawAxes(cx, cy) {
+  const o = persp(rot3([0,0,0], AX_RX, AX_RY), cx, cy);
+
+  const axes = [
+    { vec: [AX_LEN, 0, 0],      color: 'rgba(255,90,90,0.90)',  label: 'X' },
+    { vec: [0, -AX_LEN, 0],     color: 'rgba(90,210,90,0.90)',  label: 'Y' },
+    { vec: [0, 0, -AX_LEN],     color: 'rgba(90,150,255,0.90)', label: 'Z' },
+  ];
+
+  ctx.lineWidth = 1.4;
+  ctx.font = 'bold 10px Segoe UI, sans-serif';
+
+  for (const { vec, color, label } of axes) {
+    const e = persp(rot3(vec, AX_RX, AX_RY), cx, cy);
+    ctx.strokeStyle = color;
+    ctx.fillStyle   = color;
+    ctx.beginPath();
+    ctx.moveTo(o[0], o[1]);
+    ctx.lineTo(e[0], e[1]);
+    ctx.stroke();
+    drawArrowHead(o[0], o[1], e[0], e[1]);
+    // лейбл чуть дальше конца стрелки
+    const lx = e[0] + (e[0]-o[0]) * 0.28;
+    const ly = e[1] + (e[1]-o[1]) * 0.28;
+    drawLabel(label, lx, ly, color);
+  }
+
+  // точка начала координат
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.arc(o[0], o[1], 2.5, 0, Math.PI*2);
+  ctx.fill();
+}
 
 // ── Скелет руки ──
 const CONNECTIONS = [
@@ -103,37 +201,44 @@ const CONNECTIONS = [
   [0,17],[17,18],[18,19],[19,20],
   [5,9],[9,13],[13,17],
 ];
-const TIPS = [ {i:4,n:'1'}, {i:8,n:'2'}, {i:12,n:'3'}, {i:16,n:'4'}, {i:20,n:'5'} ];
+const TIPS    = [{i:4,n:'1'},{i:8,n:'2'},{i:12,n:'3'},{i:16,n:'4'},{i:20,n:'5'}];
 const TIP_SET = new Set(TIPS.map(t => t.i));
 
 function drawHand(lm) {
   const W = overlay.width, H = overlay.height;
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.50)';
   ctx.lineWidth = 1.2;
-  for (const [a, b] of CONNECTIONS) {
+  for (const [a,b] of CONNECTIONS) {
     ctx.beginPath();
-    ctx.moveTo(lm[a].x * W, lm[a].y * H);
-    ctx.lineTo(lm[b].x * W, lm[b].y * H);
+    ctx.moveTo(lm[a].x*W, lm[a].y*H);
+    ctx.lineTo(lm[b].x*W, lm[b].y*H);
     ctx.stroke();
   }
-
   for (let i = 0; i < lm.length; i++) {
-    const x = lm[i].x * W, y = lm[i].y * H;
     ctx.beginPath();
-    ctx.arc(x, y, TIP_SET.has(i) ? 4.5 : 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = TIP_SET.has(i) ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.60)';
+    ctx.arc(lm[i].x*W, lm[i].y*H, TIP_SET.has(i) ? 4.5 : 2.5, 0, Math.PI*2);
+    ctx.fillStyle = TIP_SET.has(i) ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
     ctx.fill();
   }
 
-  // Номера пальцев
-  ctx.font = '500 11px Segoe UI, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  for (const { i, n } of TIPS) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillText(n, lm[i].x * W, lm[i].y * H - 10);
+  // Номера пальцев — читаемые (зеркало компенсируем)
+  ctx.font = '600 11px Segoe UI, sans-serif';
+  for (const {i,n} of TIPS) {
+    drawLabel(n, lm[i].x*W, lm[i].y*H - 14, 'rgba(255,255,255,0.90)');
   }
+}
+
+// ── Обновление панели координат ──
+const f = v => v.toFixed(3);
+function updateFingerInfo(lm) {
+  TIPS.forEach(({i}, fi) => {
+    const p = lm[i];
+    const r = infoRows[fi];
+    r.querySelector('.axis-x').innerHTML = `x <b>${f(p.x)}</b>`;
+    r.querySelector('.axis-y').innerHTML = `y <b>${f(p.y)}</b>`;
+    r.querySelector('.axis-z').innerHTML = `z <b>${f(p.z)}</b>`;
+  });
 }
 
 // ── Куб ──
@@ -143,31 +248,16 @@ const EDGES = [
   [0,4],[1,5],[2,6],[3,7],
 ];
 
-function rotY([x,y,z], a) {
-  return [x*Math.cos(a)+z*Math.sin(a), y, -x*Math.sin(a)+z*Math.cos(a)];
-}
-function rotX([x,y,z], a) {
-  return [x, y*Math.cos(a)-z*Math.sin(a), y*Math.sin(a)+z*Math.cos(a)];
-}
-function proj([x,y,z], cx, cy) {
-  const f = 280 / (280 + z);
-  return [cx + x * f, cy + y * f];
-}
-
 function drawCube(cx, cy, rx, ry, alpha, s) {
   const verts = [
     [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
     [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s],
   ];
-  const pts = verts
-    .map(v => rotY(v, ry))
-    .map(v => rotX(v, rx))
-    .map(v => proj(v, cx, cy));
-
+  const pts = verts.map(v => persp(rot3(v, rx, ry), cx, cy));
   ctx.globalAlpha = alpha;
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 1.2;
-  for (const [a, b] of EDGES) {
+  for (const [a,b] of EDGES) {
     ctx.beginPath();
     ctx.moveTo(pts[a][0], pts[a][1]);
     ctx.lineTo(pts[b][0], pts[b][1]);
@@ -177,21 +267,19 @@ function drawCube(cx, cy, rx, ry, alpha, s) {
 }
 
 // ── Состояние куба ──
-let cubeAlpha  = 0;
-let cubeCurS   = 42, cubeTargS = 42;
-let cubeCurRX  = 0,  cubeCurRY  = 0;
-let cubeTargRX = 0,  cubeTargRY = 0;
+let cubeAlpha = 0;
+let cubeCurS  = 42, cubeTargS  = 42;
+let cubeCurRX = 0,  cubeTargRX = 0;
+let cubeCurRY = 0,  cubeTargRY = 0;
 
 // ── MediaPipe ──
 const isMobile = window.innerWidth < 768;
-const hands = new Hands({
-  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
-});
+const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
 hands.setOptions({
   maxNumHands: 2,
   modelComplexity: isMobile ? 0 : 1,
   minDetectionConfidence: 0.7,
-  minTrackingConfidence:  0.5,
+  minTrackingConfidence: 0.5,
 });
 
 let modelReady = false;
@@ -202,34 +290,33 @@ hands.onResults(results => {
   const W = overlay.width, H = overlay.height;
   ctx.clearRect(0, 0, W, H);
 
-  let rightWrist = null;
+  // Оси — снизу справа на экране = снизу слева на канвасе
+  drawAxes(W * 0.14, H * 0.82);
+
+  let rightLm = null;
 
   if (results.multiHandLandmarks) {
     for (let i = 0; i < results.multiHandLandmarks.length; i++) {
-      const lm         = results.multiHandLandmarks[i];
-      const handedness = results.multiHandedness?.[i]?.label;
+      const lm   = results.multiHandLandmarks[i];
+      const hand = results.multiHandedness?.[i]?.label;
       drawHand(lm);
-      // MediaPipe при фронталке возвращает "Left" для анатомически правой руки
-      if (handedness === 'Left') {
-        rightWrist = lm[0];
-
-        // Размер куба — расстояние между пальцами 1 и 2
+      if (hand === 'Left') {   // при фронталке "Left" = анатомически правая
+        rightLm = lm;
         const px = (lm[4].x - lm[8].x) * W;
         const py = (lm[4].y - lm[8].y) * H;
-        cubeTargS = Math.max(14, Math.min(140, Math.sqrt(px*px + py*py) * 0.55));
-
-        // Y: пронация/супинация — разница глубины (z) между сторонами ладони
+        cubeTargS  = Math.max(14, Math.min(140, Math.sqrt(px*px + py*py) * 0.55));
         cubeTargRY = (lm[5].z - lm[17].z) * 12.0;
-        // X: наклон руки вперёд/назад
-        cubeTargRX = (lm[9].y - lm[0].y) * 4.0;
+        cubeTargRX = (lm[9].y - lm[0].y)  *  4.0;
       }
     }
   }
 
-  cubeAlpha = rightWrist
-    ? Math.min(1, cubeAlpha + 0.06)
-    : Math.max(0, cubeAlpha - 0.04);
+  // Обновляем панель первой обнаруженной руки
+  const anyLm = results.multiHandLandmarks?.[0];
+  if (anyLm) { updateFingerInfo(anyLm); fingerInfo.classList.add('visible'); }
+  else        { fingerInfo.classList.remove('visible'); }
 
+  cubeAlpha  = rightLm ? Math.min(1, cubeAlpha + 0.06) : Math.max(0, cubeAlpha - 0.04);
   cubeCurS  += (cubeTargS  - cubeCurS)  * 0.12;
   cubeCurRX += (cubeTargRX - cubeCurRX) * 0.10;
   cubeCurRY += (cubeTargRY - cubeCurRY) * 0.10;
@@ -237,8 +324,6 @@ hands.onResults(results => {
   if (cubeAlpha > 0) {
     const t      = performance.now() / 1000;
     const floatY = Math.sin(t * 1.6) * 10;
-    // Фиксированная позиция: левый край экрана, центр по вертикали
-    // Канвас зеркальный, поэтому рисуем справа (W * 0.85)
     drawCube(W * 0.85, H * 0.5 + floatY, cubeCurRX, cubeCurRY, cubeAlpha, cubeCurS);
   }
 });
@@ -253,7 +338,6 @@ navigator.mediaDevices.getUserMedia({
   video.addEventListener('loadedmetadata', () => {
     badge.classList.add('visible');
     msgText.textContent = 'loading model';
-
     let running = true;
     async function loop() {
       if (!running) return;
@@ -261,7 +345,6 @@ navigator.mediaDevices.getUserMedia({
       requestAnimationFrame(loop);
     }
     loop();
-
     window.addEventListener('pagehide', () => { running = false; }, { once: true });
   });
 })
