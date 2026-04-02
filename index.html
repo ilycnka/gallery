@@ -157,7 +157,6 @@ const CORNERS = [
 const NAV = [
   { i18nKey: 'nav_collections', href: 'collections', corner: 0 },
   { i18nKey: 'nav_about',       href: 'about',       corner: 1 },
-  { i18nKey: 'nav_acquire',                               corner: 2 },
 ];
 
 const triGroup = new THREE.Group();
@@ -188,6 +187,17 @@ NAV.forEach(item => {
   triGroup.add(mesh);
   navMeshes.push({ mesh, item });
 });
+
+// Чёрная точка у третьего угла
+const dotMesh = new THREE.Mesh(
+  new THREE.CircleGeometry(isMobile ? 0.07 : 0.06, 32),
+  new THREE.MeshBasicMaterial({ color: 0x1a1a1a, side: THREE.DoubleSide })
+);
+{
+  const v = CORNERS[2], dir = v.clone().normalize();
+  dotMesh.position.copy(v).addScaledVector(dir, 0.30);
+}
+triGroup.add(dotMesh);
 
 function rebuildNavTextures() {
   navMeshes.forEach(({ mesh, item }) => {
@@ -325,8 +335,9 @@ function animate() {
   triGroup.position.x = camera.position.x;
   triGroup.position.y = camera.position.y;
 
-  // Надписи всегда смотрят на камеру
+  // Надписи и точка всегда смотрят на камеру
   navMeshes.forEach(({ mesh }) => mesh.lookAt(camera.position));
+  dotMesh.lookAt(camera.position);
 
   renderer.render(scene, camera);
 }

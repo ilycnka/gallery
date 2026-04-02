@@ -28,7 +28,6 @@
       coming_soon:     'Скоро',
       coming_not_soon: 'Не скоро',
       nav_about:       'проект',
-      nav_acquire:     'поддержать',
       for_sale:        'ты можешь стать частью коллекции',
     },
     en: {
@@ -58,7 +57,6 @@
       coming_soon:     'coming soon',
       coming_not_soon: 'coming not soon',
       nav_about:       'about',
-      nav_acquire:     'support',
       for_sale:        'you can become a part of the collection',
     },
   };
