@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Live — VoidWall</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    #video {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: grayscale(100%) contrast(1.05);
+    }
+
+    #back {
+      position: fixed;
+      top: 22px; left: 22px; z-index: 10;
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.10em;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    #back:hover { color: rgba(255,255,255,0.80); }
+
+    /* Индикатор ● live */
+    #live-badge {
+      position: fixed;
+      top: 22px; right: 22px; z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 10px;
+      letter-spacing: 0.20em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.40);
+      opacity: 0;
+      transition: opacity 0.6s;
+    }
+    #live-badge.visible { opacity: 1; }
+    #live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #fff;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.25; }
+    }
+
+    /* Экран ошибки / ожидания */
+    #message {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #message span {
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.22);
+    }
+
+    /* Тонкое виньетирование */
+    #vignette {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center,
+        rgba(0,0,0,0) 55%,
+        rgba(0,0,0,0.55) 100%);
+    }
+  </style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<div id="vignette"></div>
+
+<a id="back" href="../">← back</a>
+<div id="live-badge"><div id="live-dot"></div><span>live</span></div>
+<div id="message"><span id="msg-text">opening camera</span></div>
+
+<script src="../js/i18n.js?v=4"></script>
+<script>
+document.getElementById('back').textContent = I18N.t('back');
+window.addEventListener('langchange', () => {
+  document.getElementById('back').textContent = I18N.t('back');
+});
+
+const video   = document.getElementById('video');
+const badge   = document.getElementById('live-badge');
+const message = document.getElementById('message');
+const msgText = document.getElementById('msg-text');
+
+// Предпочитаем заднюю камеру на мобиле
+const constraints = {
+  video: {
+    facingMode: { ideal: 'environment' },
+    width:  { ideal: 1920 },
+    height: { ideal: 1080 },
+  },
+  audio: false,
+};
+
+navigator.mediaDevices.getUserMedia(constraints)
+  .then(stream => {
+    video.srcObject = stream;
+    video.addEventListener('loadedmetadata', () => {
+      message.style.display = 'none';
+      badge.classList.add('visible');
+    });
+  })
+  .catch(err => {
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      msgText.textContent = 'camera access denied';
+    } else if (err.name === 'NotFoundError') {
+      msgText.textContent = 'no camera found';
+    } else {
+      msgText.textContent = 'camera unavailable';
+    }
+  });
+
+// Останавливаем камеру при уходе со страницы
+window.addEventListener('pagehide', () => {
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+});
+</script>
+</body>
+</html>

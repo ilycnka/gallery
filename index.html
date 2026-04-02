@@ -254,6 +254,7 @@ const targetMouse = new THREE.Vector2();
 const raycaster   = new THREE.Raycaster();
 const _ndc        = new THREE.Vector2();
 const navMeshList = navMeshes.map(n => n.mesh);
+const allClickable = [...navMeshList, dotMesh];
 
 function toNDC(cx, cy) {
   _ndc.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
@@ -262,8 +263,10 @@ function toNDC(cx, cy) {
 
 function handleTap(cx, cy) {
   raycaster.setFromCamera(toNDC(cx, cy), camera);
-  const hit = raycaster.intersectObjects(navMeshList)[0];
-  const nav = hit ? navMeshes.find(n => n.mesh === hit.object) : null;
+  const hit = raycaster.intersectObjects(allClickable)[0];
+  if (!hit) return;
+  if (hit.object === dotMesh) { window.location.href = 'live'; return; }
+  const nav = navMeshes.find(n => n.mesh === hit.object);
   if (nav?.item.href) window.location.href = nav.item.href;
 }
 
@@ -300,9 +303,9 @@ window.addEventListener('mousemove', e => {
     targetMouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
     targetMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(toNDC(e.clientX, e.clientY), camera);
-    const hit = raycaster.intersectObjects(navMeshList)[0];
+    const hit = raycaster.intersectObjects(allClickable)[0];
     renderer.domElement.style.cursor =
-      (hit && navMeshes.find(n => n.mesh === hit.object)?.item.href) ? 'pointer' : 'default';
+      (hit && (hit.object === dotMesh || navMeshes.find(n => n.mesh === hit.object)?.item.href)) ? 'pointer' : 'default';
   }
 });
 window.addEventListener('mouseup',   e => dragEnd(e.clientX, e.clientY));
