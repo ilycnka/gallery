@@ -218,8 +218,9 @@ hands.onResults(results => {
         const py = (lm[4].y - lm[8].y) * H;
         cubeTargS = Math.max(14, Math.min(140, Math.sqrt(px*px + py*py) * 0.55));
 
-        // Вращение — ориентация ладони
-        cubeTargRY = (lm[9].x - lm[0].x) * 5.0;
+        // Y: пронация/супинация — разница глубины (z) между сторонами ладони
+        cubeTargRY = (lm[5].z - lm[17].z) * 12.0;
+        // X: наклон руки вперёд/назад
         cubeTargRX = (lm[9].y - lm[0].y) * 4.0;
       }
     }
