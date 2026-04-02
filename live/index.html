@@ -26,6 +26,17 @@
       transform: scaleX(-1);
     }
 
+    /* Канвас скелета — тоже зеркалим, чтобы совпадало с видео */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      pointer-events: none;
+      transform: scaleX(-1);
+    }
+
     #back {
       position: fixed;
       top: 22px; left: 22px; z-index: 10;
@@ -37,7 +48,6 @@
     }
     #back:hover { color: rgba(255,255,255,0.80); }
 
-    /* Индикатор ● live */
     #live-badge {
       position: fixed;
       top: 22px; right: 22px; z-index: 10;
@@ -63,7 +73,6 @@
       50%       { opacity: 0.25; }
     }
 
-    /* Экран ошибки / ожидания */
     #message {
       position: fixed;
       inset: 0;
@@ -79,18 +88,23 @@
       text-transform: uppercase;
       color: rgba(255,255,255,0.22);
     }
-
   </style>
 </head>
 <body>
 
 <video id="video" autoplay playsinline muted></video>
+<canvas id="overlay"></canvas>
 
 <a id="back" href="../">← back</a>
 <div id="live-badge"><div id="live-dot"></div><span>live</span></div>
 <div id="message"><span id="msg-text">opening camera</span></div>
 
 <script src="../js/i18n.js?v=4"></script>
+
+<!-- MediaPipe Hands -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
 <script>
 document.getElementById('back').textContent = I18N.t('back');
 window.addEventListener('langchange', () => {
@@ -98,17 +112,80 @@ window.addEventListener('langchange', () => {
 });
 
 const video   = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const ctx     = overlay.getContext('2d');
 const badge   = document.getElementById('live-badge');
 const message = document.getElementById('message');
 const msgText = document.getElementById('msg-text');
 
-// Предпочитаем заднюю камеру на мобиле
+// Синхронизируем размер канваса с окном
+function resizeOverlay() {
+  overlay.width  = window.innerWidth;
+  overlay.height = window.innerHeight;
+}
+resizeOverlay();
+window.addEventListener('resize', resizeOverlay);
+
+// ── Соединения суставов руки (21 точка MediaPipe) ──
+const CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],          // большой
+  [0,5],[5,6],[6,7],[7,8],          // указательный
+  [0,9],[9,10],[10,11],[11,12],     // средний
+  [0,13],[13,14],[14,15],[15,16],   // безымянный
+  [0,17],[17,18],[18,19],[19,20],   // мизинец
+  [5,9],[9,13],[13,17],             // ладонь
+];
+const FINGERTIPS = new Set([4, 8, 12, 16, 20]);
+
+// ── Рисуем скелет ──
+function drawHand(landmarks) {
+  const W = overlay.width, H = overlay.height;
+
+  // Линии
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth   = 1.2;
+  for (const [a, b] of CONNECTIONS) {
+    const p1 = landmarks[a], p2 = landmarks[b];
+    ctx.beginPath();
+    ctx.moveTo(p1.x * W, p1.y * H);
+    ctx.lineTo(p2.x * W, p2.y * H);
+    ctx.stroke();
+  }
+
+  // Точки
+  for (let i = 0; i < landmarks.length; i++) {
+    const lm = landmarks[i];
+    const x  = lm.x * W, y = lm.y * H;
+    const r  = FINGERTIPS.has(i) ? 5 : 3;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = FINGERTIPS.has(i) ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)';
+    ctx.fill();
+  }
+}
+
+// ── MediaPipe Hands ──
+const isMobile = window.innerWidth < 768;
+
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+});
+hands.setOptions({
+  maxNumHands:          2,
+  modelComplexity:      isMobile ? 0 : 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence:  0.5,
+});
+hands.onResults(results => {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  if (results.multiHandLandmarks) {
+    for (const lm of results.multiHandLandmarks) drawHand(lm);
+  }
+});
+
+// ── Камера ──
 const constraints = {
-  video: {
-    facingMode: { ideal: 'user' },
-    width:  { ideal: 1920 },
-    height: { ideal: 1080 },
-  },
+  video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
   audio: false,
 };
 
@@ -118,6 +195,18 @@ navigator.mediaDevices.getUserMedia(constraints)
     video.addEventListener('loadedmetadata', () => {
       message.style.display = 'none';
       badge.classList.add('visible');
+
+      // Запускаем MediaPipe через Camera util
+      msgText.textContent = 'loading model';
+      message.style.display = 'flex';
+
+      const cam = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }); },
+        width: 640, height: 360,
+      });
+      cam.start().then(() => {
+        message.style.display = 'none';
+      });
     });
   })
   .catch(err => {
@@ -130,7 +219,6 @@ navigator.mediaDevices.getUserMedia(constraints)
     }
   });
 
-// Останавливаем камеру при уходе со страницы
 window.addEventListener('pagehide', () => {
   if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
 });
