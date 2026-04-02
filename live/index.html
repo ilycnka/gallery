@@ -7,7 +7,6 @@
   <link rel="icon" type="image/svg+xml" href="../favicon.svg">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
     body {
       background: #000;
       overflow: hidden;
@@ -15,28 +14,22 @@
       user-select: none;
       font-family: 'Segoe UI', sans-serif;
     }
-
     #video {
       position: fixed;
       inset: 0;
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       object-fit: cover;
       display: block;
       transform: scaleX(-1);
     }
-
-    /* Канвас скелета — тоже зеркалим, чтобы совпадало с видео */
     #overlay {
       position: fixed;
       inset: 0;
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       z-index: 3;
       pointer-events: none;
       transform: scaleX(-1);
     }
-
     #back {
       position: fixed;
       top: 22px; left: 22px; z-index: 10;
@@ -47,45 +40,28 @@
       transition: color 0.2s;
     }
     #back:hover { color: rgba(255,255,255,0.80); }
-
     #live-badge {
       position: fixed;
       top: 22px; right: 22px; z-index: 10;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 10px;
-      letter-spacing: 0.20em;
-      text-transform: uppercase;
+      display: flex; align-items: center; gap: 7px;
+      font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase;
       color: rgba(255,255,255,0.40);
-      opacity: 0;
-      transition: opacity 0.6s;
+      opacity: 0; transition: opacity 0.6s;
     }
     #live-badge.visible { opacity: 1; }
     #live-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
+      width: 6px; height: 6px; border-radius: 50%;
       background: #fff;
       animation: pulse 2s ease-in-out infinite;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.25; }
-    }
-
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
     #message {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 5;
-      pointer-events: none;
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 5; pointer-events: none;
     }
     #message span {
-      font-size: 10px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
       color: rgba(255,255,255,0.22);
     }
   </style>
@@ -100,10 +76,7 @@
 <div id="message"><span id="msg-text">opening camera</span></div>
 
 <script src="../js/i18n.js?v=4"></script>
-
-<!-- MediaPipe Hands -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
 <script>
 document.getElementById('back').textContent = I18N.t('back');
 window.addEventListener('langchange', () => {
@@ -117,107 +90,178 @@ const badge   = document.getElementById('live-badge');
 const message = document.getElementById('message');
 const msgText = document.getElementById('msg-text');
 
-// Синхронизируем размер канваса с окном
-function resizeOverlay() {
-  overlay.width  = window.innerWidth;
-  overlay.height = window.innerHeight;
-}
+function resizeOverlay() { overlay.width = window.innerWidth; overlay.height = window.innerHeight; }
 resizeOverlay();
 window.addEventListener('resize', resizeOverlay);
 
-// ── Соединения суставов руки (21 точка MediaPipe) ──
+// ── Скелет руки ──
 const CONNECTIONS = [
-  [0,1],[1,2],[2,3],[3,4],          // большой
-  [0,5],[5,6],[6,7],[7,8],          // указательный
-  [0,9],[9,10],[10,11],[11,12],     // средний
-  [0,13],[13,14],[14,15],[15,16],   // безымянный
-  [0,17],[17,18],[18,19],[19,20],   // мизинец
-  [5,9],[9,13],[13,17],             // ладонь
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],
+  [5,9],[9,13],[13,17],
 ];
-const FINGERTIPS = new Set([4, 8, 12, 16, 20]);
+const TIPS = [ {i:4,n:'1'}, {i:8,n:'2'}, {i:12,n:'3'}, {i:16,n:'4'}, {i:20,n:'5'} ];
+const TIP_SET = new Set(TIPS.map(t => t.i));
 
-// ── Рисуем скелет ──
-function drawHand(landmarks) {
+function drawHand(lm) {
   const W = overlay.width, H = overlay.height;
 
-  // Линии
   ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-  ctx.lineWidth   = 1.2;
+  ctx.lineWidth = 1.2;
   for (const [a, b] of CONNECTIONS) {
-    const p1 = landmarks[a], p2 = landmarks[b];
     ctx.beginPath();
-    ctx.moveTo(p1.x * W, p1.y * H);
-    ctx.lineTo(p2.x * W, p2.y * H);
+    ctx.moveTo(lm[a].x * W, lm[a].y * H);
+    ctx.lineTo(lm[b].x * W, lm[b].y * H);
     ctx.stroke();
   }
 
-  // Точки
-  for (let i = 0; i < landmarks.length; i++) {
-    const lm = landmarks[i];
-    const x  = lm.x * W, y = lm.y * H;
-    const r  = FINGERTIPS.has(i) ? 5 : 3;
+  for (let i = 0; i < lm.length; i++) {
+    const x = lm[i].x * W, y = lm[i].y * H;
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = FINGERTIPS.has(i) ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)';
+    ctx.arc(x, y, TIP_SET.has(i) ? 4.5 : 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = TIP_SET.has(i) ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.60)';
     ctx.fill();
+  }
+
+  // Номера пальцев
+  ctx.font = '500 11px Segoe UI, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  for (const { i, n } of TIPS) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText(n, lm[i].x * W, lm[i].y * H - 10);
   }
 }
 
-// ── MediaPipe Hands ──
-const isMobile = window.innerWidth < 768;
+// ── Куб ──
+const S = 42; // полуразмер куба в пикселях
+const VERTS = [
+  [-S,-S,-S],[S,-S,-S],[S,S,-S],[-S,S,-S],
+  [-S,-S,S],[S,-S,S],[S,S,S],[-S,S,S],
+];
+const EDGES = [
+  [0,1],[1,2],[2,3],[3,0],
+  [4,5],[5,6],[6,7],[7,4],
+  [0,4],[1,5],[2,6],[3,7],
+];
 
+function rotY([x,y,z], a) {
+  return [x*Math.cos(a)+z*Math.sin(a), y, -x*Math.sin(a)+z*Math.cos(a)];
+}
+function rotX([x,y,z], a) {
+  return [x, y*Math.cos(a)-z*Math.sin(a), y*Math.sin(a)+z*Math.cos(a)];
+}
+function proj([x,y,z], cx, cy) {
+  const f = 280 / (280 + z);
+  return [cx + x * f, cy + y * f];
+}
+
+function drawCube(cx, cy, t, alpha) {
+  const rx = t * 0.55, ry = t * 0.85;
+  const pts = VERTS
+    .map(v => rotY(v, ry))
+    .map(v => rotX(v, rx))
+    .map(v => proj(v, cx, cy));
+
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 1.2;
+  for (const [a, b] of EDGES) {
+    ctx.beginPath();
+    ctx.moveTo(pts[a][0], pts[a][1]);
+    ctx.lineTo(pts[b][0], pts[b][1]);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Состояние куба ──
+let cubeAlpha  = 0;
+let cubeCurX   = 0, cubeCurY = 0;
+let cubeTargX  = 0, cubeTargY = 0;
+
+// ── MediaPipe ──
+const isMobile = window.innerWidth < 768;
 const hands = new Hands({
   locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
 });
 hands.setOptions({
-  maxNumHands:          2,
-  modelComplexity:      isMobile ? 0 : 1,
+  maxNumHands: 2,
+  modelComplexity: isMobile ? 0 : 1,
   minDetectionConfidence: 0.7,
   minTrackingConfidence:  0.5,
 });
+
+let modelReady = false;
+
+hands.onResults(results => {
+  if (!modelReady) { modelReady = true; message.style.display = 'none'; }
+
+  const W = overlay.width, H = overlay.height;
+  ctx.clearRect(0, 0, W, H);
+
+  let rightWrist = null;
+
+  if (results.multiHandLandmarks) {
+    for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+      const lm         = results.multiHandLandmarks[i];
+      const handedness = results.multiHandedness?.[i]?.label;
+      drawHand(lm);
+      // MediaPipe при фронталке возвращает "Left" для анатомически правой руки
+      if (handedness === 'Left') rightWrist = lm[0];
+    }
+  }
+
+  // Плавное появление/исчезновение куба
+  if (rightWrist) {
+    cubeAlpha = Math.min(1, cubeAlpha + 0.06);
+    // Куб на противоположной стороне от кисти
+    cubeTargX = (1 - rightWrist.x) * W;
+    cubeTargY = (1 - rightWrist.y) * H;
+  } else {
+    cubeAlpha = Math.max(0, cubeAlpha - 0.04);
+  }
+
+  cubeCurX += (cubeTargX - cubeCurX) * 0.08;
+  cubeCurY += (cubeTargY - cubeCurY) * 0.08;
+
+  if (cubeAlpha > 0) {
+    const t     = performance.now() / 1000;
+    const floatY = Math.sin(t * 1.6) * 10;
+    drawCube(cubeCurX, cubeCurY + floatY, t, cubeAlpha);
+  }
+});
+
 // ── Камера ──
-const constraints = {
+navigator.mediaDevices.getUserMedia({
   video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
   audio: false,
-};
+})
+.then(stream => {
+  video.srcObject = stream;
+  video.addEventListener('loadedmetadata', () => {
+    badge.classList.add('visible');
+    msgText.textContent = 'loading model';
 
-navigator.mediaDevices.getUserMedia(constraints)
-  .then(stream => {
-    video.srcObject = stream;
-    video.addEventListener('loadedmetadata', () => {
-      badge.classList.add('visible');
-
-      // Ждём первого кадра модели, потом скрываем сообщение
-      let modelReady = false;
-      hands.onResults(results => {
-        if (!modelReady) { modelReady = true; message.style.display = 'none'; }
-        ctx.clearRect(0, 0, overlay.width, overlay.height);
-        if (results.multiHandLandmarks) {
-          for (const lm of results.multiHandLandmarks) drawHand(lm);
-        }
-      });
-
-      // Отправляем кадры напрямую через rAF — без Camera util
-      let running = true;
-      async function loop() {
-        if (!running) return;
-        if (video.readyState >= 2) await hands.send({ image: video });
-        requestAnimationFrame(loop);
-      }
-      loop();
-
-      window.addEventListener('pagehide', () => { running = false; });
-    });
-  })
-  .catch(err => {
-    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      msgText.textContent = 'camera access denied';
-    } else if (err.name === 'NotFoundError') {
-      msgText.textContent = 'no camera found';
-    } else {
-      msgText.textContent = 'camera unavailable';
+    let running = true;
+    async function loop() {
+      if (!running) return;
+      if (video.readyState >= 2) await hands.send({ image: video });
+      requestAnimationFrame(loop);
     }
+    loop();
+
+    window.addEventListener('pagehide', () => { running = false; }, { once: true });
   });
+})
+.catch(err => {
+  if (err.name === 'NotAllowedError') msgText.textContent = 'camera access denied';
+  else if (err.name === 'NotFoundError') msgText.textContent = 'no camera found';
+  else msgText.textContent = 'camera unavailable';
+});
 
 window.addEventListener('pagehide', () => {
   if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
