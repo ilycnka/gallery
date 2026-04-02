@@ -64,6 +64,97 @@
       font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
       color: rgba(255,255,255,0.22);
     }
+
+    /* ── Кнопка записи жеста ── */
+    #btn-capture {
+      position: fixed;
+      bottom: 32px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: none;
+      border: 1px solid rgba(255,255,255,0.25);
+      color: rgba(255,255,255,0.45);
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 10px 28px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, opacity 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #btn-capture:hover  { border-color: rgba(255,255,255,0.65); color: rgba(255,255,255,0.85); }
+    #btn-capture.dim    { opacity: 0.28; pointer-events: none; }
+
+    /* Счётчик библиотеки */
+    #lib-count {
+      position: fixed;
+      bottom: 70px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.20);
+      pointer-events: none;
+    }
+
+    /* ── Оверлей именования ── */
+    #name-overlay {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,0.72);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    #name-overlay.open { opacity: 1; pointer-events: all; }
+
+    #name-card {
+      display: flex; flex-direction: column; gap: 18px;
+      padding: 36px 32px;
+      border: 1px solid rgba(255,255,255,0.15);
+      min-width: min(320px, 88vw);
+    }
+    #name-label {
+      font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+    }
+    #name-input {
+      background: none;
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.30);
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 18px;
+      font-weight: 200;
+      padding: 6px 0;
+      outline: none;
+      width: 100%;
+    }
+    #name-input::placeholder { color: rgba(255,255,255,0.18); }
+    #name-actions { display: flex; gap: 12px; justify-content: flex-end; }
+    .name-btn {
+      background: none; border: 1px solid rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.55); font-family: inherit;
+      font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase;
+      padding: 8px 20px; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .name-btn:hover { border-color: rgba(255,255,255,0.60); color: #fff; }
+    .name-btn.primary { border-color: rgba(255,255,255,0.50); color: rgba(255,255,255,0.85); }
+
+    /* Toast подтверждения */
+    #toast {
+      position: fixed; bottom: 90px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 60;
+      font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: rgba(255,255,255,0.70);
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -74,6 +165,22 @@
 <a id="back" href="../">← back</a>
 <div id="live-badge"><div id="live-dot"></div><span>live</span></div>
 <div id="message"><span id="msg-text">opening camera</span></div>
+
+<div id="lib-count"></div>
+<button id="btn-capture" class="dim">запомнить жест</button>
+
+<div id="name-overlay">
+  <div id="name-card">
+    <div id="name-label">название жеста</div>
+    <input id="name-input" type="text" placeholder="например: pinch" autocomplete="off" spellcheck="false" />
+    <div id="name-actions">
+      <button class="name-btn" id="btn-cancel">отмена</button>
+      <button class="name-btn primary" id="btn-save">сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
 
 <script src="../js/i18n.js?v=4"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -213,7 +320,75 @@ hands.setOptions({
   minTrackingConfidence:  0.5,
 });
 
-let modelReady = false;
+let modelReady    = false;
+let lastLandmarks = null; // последние обнаруженные лендмарки для записи
+
+// ── Библиотека жестов (localStorage) ──
+const STORAGE_KEY = 'vw_gesture_library';
+function loadLibrary()  { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
+function saveLibrary(l) { localStorage.setItem(STORAGE_KEY, JSON.stringify(l)); }
+
+const btnCapture   = document.getElementById('btn-capture');
+const nameOverlay  = document.getElementById('name-overlay');
+const nameInput    = document.getElementById('name-input');
+const btnSave      = document.getElementById('btn-save');
+const btnCancel    = document.getElementById('btn-cancel');
+const libCount     = document.getElementById('lib-count');
+const toast        = document.getElementById('toast');
+
+function updateCount() {
+  const n = loadLibrary().length;
+  libCount.textContent = n ? `${n} gesture${n === 1 ? '' : 's'} saved` : '';
+}
+updateCount();
+
+let capturedLandmarks = null;
+let toastTimer = null;
+
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+function openNaming() {
+  nameInput.value = '';
+  nameOverlay.classList.add('open');
+  setTimeout(() => nameInput.focus(), 80);
+}
+function closeNaming() {
+  nameOverlay.classList.remove('open');
+  capturedLandmarks = null;
+}
+
+function confirmSave() {
+  const name = nameInput.value.trim();
+  if (!name || !capturedLandmarks) return;
+  const lib = loadLibrary();
+  lib.push({
+    name,
+    landmarks: capturedLandmarks,          // 21 точка {x,y,z}
+    created: new Date().toISOString(),
+  });
+  saveLibrary(lib);
+  updateCount();
+  closeNaming();
+  showToast(`"${name}" сохранён`);
+}
+
+btnCapture.addEventListener('click', () => {
+  if (!lastLandmarks) return;
+  capturedLandmarks = JSON.parse(JSON.stringify(lastLandmarks));
+  openNaming();
+});
+btnSave.addEventListener('click', confirmSave);
+btnCancel.addEventListener('click', closeNaming);
+nameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmSave();
+  if (e.key === 'Escape') closeNaming();
+});
+nameOverlay.addEventListener('click', e => { if (e.target === nameOverlay) closeNaming(); });
 
 hands.onResults(results => {
   if (!modelReady) { modelReady = true; message.style.display = 'none'; }
@@ -222,6 +397,9 @@ hands.onResults(results => {
   ctx.clearRect(0, 0, W, H);
 
   let rightWrist = null;
+  const anyLm = results.multiHandLandmarks?.[0] || null;
+  lastLandmarks = anyLm;
+  btnCapture.classList.toggle('dim', !anyLm);
 
   if (results.multiHandLandmarks) {
     for (let i = 0; i < results.multiHandLandmarks.length; i++) {
