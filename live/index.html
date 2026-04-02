@@ -173,14 +173,25 @@ function drawCube(cx, cy, rx, ry, alpha, s) {
     .map(v => proj(v, cx, cy));
 
   ctx.globalAlpha = alpha;
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 1.2;
+
+  // Рёбра
+  ctx.strokeStyle = 'rgba(255,255,255,1.0)';
+  ctx.lineWidth = 2.0;
   for (const [a, b] of EDGES) {
     ctx.beginPath();
     ctx.moveTo(pts[a][0], pts[a][1]);
     ctx.lineTo(pts[b][0], pts[b][1]);
     ctx.stroke();
   }
+
+  // Точки на углах
+  for (const [x, y] of pts) {
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,1.0)';
+    ctx.fill();
+  }
+
   ctx.globalAlpha = 1;
 }
 
