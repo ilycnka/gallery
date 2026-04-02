@@ -137,11 +137,6 @@ function drawHand(lm) {
 }
 
 // ── Куб ──
-const S = 42; // полуразмер куба в пикселях
-const VERTS = [
-  [-S,-S,-S],[S,-S,-S],[S,S,-S],[-S,S,-S],
-  [-S,-S,S],[S,-S,S],[S,S,S],[-S,S,S],
-];
 const EDGES = [
   [0,1],[1,2],[2,3],[3,0],
   [4,5],[5,6],[6,7],[7,4],
@@ -159,9 +154,13 @@ function proj([x,y,z], cx, cy) {
   return [cx + x * f, cy + y * f];
 }
 
-function drawCube(cx, cy, t, alpha) {
+function drawCube(cx, cy, t, alpha, s) {
+  const verts = [
+    [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+    [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s],
+  ];
   const rx = t * 0.55, ry = t * 0.85;
-  const pts = VERTS
+  const pts = verts
     .map(v => rotY(v, ry))
     .map(v => rotX(v, rx))
     .map(v => proj(v, cx, cy));
@@ -180,8 +179,9 @@ function drawCube(cx, cy, t, alpha) {
 
 // ── Состояние куба ──
 let cubeAlpha  = 0;
-let cubeCurX   = 0, cubeCurY = 0;
+let cubeCurX   = 0, cubeCurY  = 0;
 let cubeTargX  = 0, cubeTargY = 0;
+let cubeCurS   = 42, cubeTargS = 42;
 
 // ── MediaPipe ──
 const isMobile = window.innerWidth < 768;
@@ -211,7 +211,13 @@ hands.onResults(results => {
       const handedness = results.multiHandedness?.[i]?.label;
       drawHand(lm);
       // MediaPipe при фронталке возвращает "Left" для анатомически правой руки
-      if (handedness === 'Left') rightWrist = lm[0];
+      if (handedness === 'Left') {
+        rightWrist = lm[0];
+        // Расстояние между кончиком большого (4) и указательного (8) пальцев
+        const dx = (lm[4].x - lm[8].x) * W;
+        const dy = (lm[4].y - lm[8].y) * H;
+        cubeTargS = Math.max(14, Math.min(140, Math.sqrt(dx*dx + dy*dy) * 0.55));
+      }
     }
   }
 
@@ -227,11 +233,12 @@ hands.onResults(results => {
 
   cubeCurX += (cubeTargX - cubeCurX) * 0.08;
   cubeCurY += (cubeTargY - cubeCurY) * 0.08;
+  cubeCurS += (cubeTargS - cubeCurS) * 0.12;
 
   if (cubeAlpha > 0) {
-    const t     = performance.now() / 1000;
+    const t      = performance.now() / 1000;
     const floatY = Math.sin(t * 1.6) * 10;
-    drawCube(cubeCurX, cubeCurY + floatY, t, cubeAlpha);
+    drawCube(cubeCurX, cubeCurY + floatY, t, cubeAlpha, cubeCurS);
   }
 });
 
