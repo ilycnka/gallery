@@ -154,12 +154,11 @@ function proj([x,y,z], cx, cy) {
   return [cx + x * f, cy + y * f];
 }
 
-function drawCube(cx, cy, t, alpha, s) {
+function drawCube(cx, cy, rx, ry, alpha, s) {
   const verts = [
     [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
     [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s],
   ];
-  const rx = t * 0.55, ry = t * 0.85;
   const pts = verts
     .map(v => rotY(v, ry))
     .map(v => rotX(v, rx))
@@ -182,6 +181,8 @@ let cubeAlpha  = 0;
 let cubeCurX   = 0, cubeCurY  = 0;
 let cubeTargX  = 0, cubeTargY = 0;
 let cubeCurS   = 42, cubeTargS = 42;
+let cubeCurRX  = 0,  cubeCurRY  = 0;
+let cubeTargRX = 0,  cubeTargRY = 0;
 
 // ── MediaPipe ──
 const isMobile = window.innerWidth < 768;
@@ -213,10 +214,15 @@ hands.onResults(results => {
       // MediaPipe при фронталке возвращает "Left" для анатомически правой руки
       if (handedness === 'Left') {
         rightWrist = lm[0];
-        // Расстояние между кончиком большого (4) и указательного (8) пальцев
-        const dx = (lm[4].x - lm[8].x) * W;
-        const dy = (lm[4].y - lm[8].y) * H;
-        cubeTargS = Math.max(14, Math.min(140, Math.sqrt(dx*dx + dy*dy) * 0.55));
+
+        // Размер куба — расстояние между пальцами 1 и 2
+        const px = (lm[4].x - lm[8].x) * W;
+        const py = (lm[4].y - lm[8].y) * H;
+        cubeTargS = Math.max(14, Math.min(140, Math.sqrt(px*px + py*py) * 0.55));
+
+        // Вращение — ориентация ладони (запястье → основание среднего пальца)
+        cubeTargRY = (lm[9].x - lm[0].x) * 5.0;  // наклон влево/вправо
+        cubeTargRX = (lm[9].y - lm[0].y) * 4.0;  // наклон вперёд/назад
       }
     }
   }
@@ -231,14 +237,16 @@ hands.onResults(results => {
     cubeAlpha = Math.max(0, cubeAlpha - 0.04);
   }
 
-  cubeCurX += (cubeTargX - cubeCurX) * 0.08;
-  cubeCurY += (cubeTargY - cubeCurY) * 0.08;
-  cubeCurS += (cubeTargS - cubeCurS) * 0.12;
+  cubeCurX  += (cubeTargX  - cubeCurX)  * 0.08;
+  cubeCurY  += (cubeTargY  - cubeCurY)  * 0.08;
+  cubeCurS  += (cubeTargS  - cubeCurS)  * 0.12;
+  cubeCurRX += (cubeTargRX - cubeCurRX) * 0.10;
+  cubeCurRY += (cubeTargRY - cubeCurRY) * 0.10;
 
   if (cubeAlpha > 0) {
     const t      = performance.now() / 1000;
     const floatY = Math.sin(t * 1.6) * 10;
-    drawCube(cubeCurX, cubeCurY + floatY, t, cubeAlpha, cubeCurS);
+    drawCube(cubeCurX, cubeCurY + floatY, cubeCurRX, cubeCurRY, cubeAlpha, cubeCurS);
   }
 });
 
