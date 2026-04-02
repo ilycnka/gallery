@@ -89,10 +89,33 @@
       /* blur дорогой на мобиле — скрываем */
       #bliks-canvas { display: none; }
     }
+
+    #drag-hint {
+      position: fixed;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.38);
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+      animation: hintFade 4.2s ease forwards;
+    }
+    @keyframes hintFade {
+      0%   { opacity: 0; }
+      12%  { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    #drag-hint.hidden { opacity: 0; transition: opacity 0.4s; animation: none; }
   </style>
 </head>
 <body>
 
+<div id="drag-hint"></div>
 <canvas id="bliks-canvas"></canvas>
 <canvas id="persp-canvas"></canvas>
 <a id="back" href="../"></a>
@@ -108,8 +131,15 @@
 <script>
   I18N.addToggle('light');
   document.getElementById('back').textContent = I18N.t('back');
+
+  // Подсказка
+  const dragHint = document.getElementById('drag-hint');
+  dragHint.textContent = I18N.t('hint_collection');
+  dragHint.addEventListener('animationend', () => dragHint.classList.add('hidden'));
+
   window.addEventListener('langchange', () => {
     document.getElementById('back').textContent = I18N.t('back');
+    dragHint.textContent = I18N.t('hint_collection');
     fillAll();
   });
 
