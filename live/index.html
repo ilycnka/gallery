@@ -103,7 +103,6 @@
 
 <!-- MediaPipe Hands -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
 <script>
 document.getElementById('back').textContent = I18N.t('back');
@@ -176,13 +175,6 @@ hands.setOptions({
   minDetectionConfidence: 0.7,
   minTrackingConfidence:  0.5,
 });
-hands.onResults(results => {
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-  if (results.multiHandLandmarks) {
-    for (const lm of results.multiHandLandmarks) drawHand(lm);
-  }
-});
-
 // ── Камера ──
 const constraints = {
   video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -193,20 +185,28 @@ navigator.mediaDevices.getUserMedia(constraints)
   .then(stream => {
     video.srcObject = stream;
     video.addEventListener('loadedmetadata', () => {
-      message.style.display = 'none';
       badge.classList.add('visible');
 
-      // Запускаем MediaPipe через Camera util
-      msgText.textContent = 'loading model';
-      message.style.display = 'flex';
+      // Ждём первого кадра модели, потом скрываем сообщение
+      let modelReady = false;
+      hands.onResults(results => {
+        if (!modelReady) { modelReady = true; message.style.display = 'none'; }
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+        if (results.multiHandLandmarks) {
+          for (const lm of results.multiHandLandmarks) drawHand(lm);
+        }
+      });
 
-      const cam = new Camera(video, {
-        onFrame: async () => { await hands.send({ image: video }); },
-        width: 640, height: 360,
-      });
-      cam.start().then(() => {
-        message.style.display = 'none';
-      });
+      // Отправляем кадры напрямую через rAF — без Camera util
+      let running = true;
+      async function loop() {
+        if (!running) return;
+        if (video.readyState >= 2) await hands.send({ image: video });
+        requestAnimationFrame(loop);
+      }
+      loop();
+
+      window.addEventListener('pagehide', () => { running = false; });
     });
   })
   .catch(err => {
@@ -221,7 +221,7 @@ navigator.mediaDevices.getUserMedia(constraints)
 
 window.addEventListener('pagehide', () => {
   if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-});
+}, { once: true });
 </script>
 </body>
 </html>
