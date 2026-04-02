@@ -178,8 +178,6 @@ function drawCube(cx, cy, rx, ry, alpha, s) {
 
 // ── Состояние куба ──
 let cubeAlpha  = 0;
-let cubeCurX   = 0, cubeCurY  = 0;
-let cubeTargX  = 0, cubeTargY = 0;
 let cubeCurS   = 42, cubeTargS = 42;
 let cubeCurRX  = 0,  cubeCurRY  = 0;
 let cubeTargRX = 0,  cubeTargRY = 0;
@@ -220,25 +218,17 @@ hands.onResults(results => {
         const py = (lm[4].y - lm[8].y) * H;
         cubeTargS = Math.max(14, Math.min(140, Math.sqrt(px*px + py*py) * 0.55));
 
-        // Вращение — ориентация ладони (запястье → основание среднего пальца)
-        cubeTargRY = (lm[9].x - lm[0].x) * 5.0;  // наклон влево/вправо
-        cubeTargRX = (lm[9].y - lm[0].y) * 4.0;  // наклон вперёд/назад
+        // Вращение — ориентация ладони
+        cubeTargRY = (lm[9].x - lm[0].x) * 5.0;
+        cubeTargRX = (lm[9].y - lm[0].y) * 4.0;
       }
     }
   }
 
-  // Плавное появление/исчезновение куба
-  if (rightWrist) {
-    cubeAlpha = Math.min(1, cubeAlpha + 0.06);
-    // Куб на противоположной стороне от кисти
-    cubeTargX = (1 - rightWrist.x) * W;
-    cubeTargY = (1 - rightWrist.y) * H;
-  } else {
-    cubeAlpha = Math.max(0, cubeAlpha - 0.04);
-  }
+  cubeAlpha = rightWrist
+    ? Math.min(1, cubeAlpha + 0.06)
+    : Math.max(0, cubeAlpha - 0.04);
 
-  cubeCurX  += (cubeTargX  - cubeCurX)  * 0.08;
-  cubeCurY  += (cubeTargY  - cubeCurY)  * 0.08;
   cubeCurS  += (cubeTargS  - cubeCurS)  * 0.12;
   cubeCurRX += (cubeTargRX - cubeCurRX) * 0.10;
   cubeCurRY += (cubeTargRY - cubeCurRY) * 0.10;
@@ -246,7 +236,9 @@ hands.onResults(results => {
   if (cubeAlpha > 0) {
     const t      = performance.now() / 1000;
     const floatY = Math.sin(t * 1.6) * 10;
-    drawCube(cubeCurX, cubeCurY + floatY, cubeCurRX, cubeCurRY, cubeAlpha, cubeCurS);
+    // Фиксированная позиция: левый край экрана, центр по вертикали
+    // Канвас зеркальный, поэтому рисуем справа (W * 0.85)
+    drawCube(W * 0.85, H * 0.5 + floatY, cubeCurRX, cubeCurRY, cubeAlpha, cubeCurS);
   }
 });
 
