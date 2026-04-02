@@ -32,17 +32,48 @@
       z-index: 10;
       white-space: nowrap;
     }
+
+    #drag-hint {
+      position: fixed;
+      bottom: 36px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(0,0,0,0.38);
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+      animation: hintFade 4.2s ease forwards;
+    }
+    @keyframes hintFade {
+      0%   { opacity: 0; }
+      12%  { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    #drag-hint.hidden { opacity: 0; transition: opacity 0.4s; animation: none; }
   </style>
 </head>
 <body>
 
 <div id="logo">VoidWall</div>
+<div id="drag-hint"></div>
 
 <script src="js/i18n.js?v=4"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
 I18N.addToggle('light');
+
+// ─── Подсказка ───
+const dragHint = document.getElementById('drag-hint');
+dragHint.textContent = I18N.t('hint_drag');
+window.addEventListener('langchange', () => { dragHint.textContent = I18N.t('hint_drag'); });
+function hideHint() { dragHint.classList.add('hidden'); }
+dragHint.addEventListener('animationend', hideHint);
+
 
 // ─── Сцена ───
 const scene = new THREE.Scene();
@@ -241,6 +272,7 @@ function dragStart(x, y) {
   dragPrev   = { x, y };
   dragDist   = 0;
   rotVelX = rotVelY = 0;
+  hideHint();
 }
 function dragMove(x, y) {
   if (!isDragging) return;

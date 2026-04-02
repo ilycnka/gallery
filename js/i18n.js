@@ -28,6 +28,7 @@
       coming_soon:     'Скоро',
       coming_not_soon: 'Не скоро',
       nav_about:       'проект',
+      hint_drag:       'двигай треугольник',
       for_sale:        'ты можешь стать частью коллекции',
     },
     en: {
@@ -57,6 +58,7 @@
       coming_soon:     'coming soon',
       coming_not_soon: 'coming not soon',
       nav_about:       'about',
+      hint_drag:       'control the triangle',
       for_sale:        'you can become a part of the collection',
     },
   };
