@@ -23,7 +23,7 @@
       height: 100%;
       object-fit: cover;
       display: block;
-      filter: grayscale(100%) contrast(1.05);
+      transform: scaleX(-1);
     }
 
     #back {
@@ -80,22 +80,11 @@
       color: rgba(255,255,255,0.22);
     }
 
-    /* Тонкое виньетирование */
-    #vignette {
-      position: fixed;
-      inset: 0;
-      z-index: 2;
-      pointer-events: none;
-      background: radial-gradient(ellipse at center,
-        rgba(0,0,0,0) 55%,
-        rgba(0,0,0,0.55) 100%);
-    }
   </style>
 </head>
 <body>
 
 <video id="video" autoplay playsinline muted></video>
-<div id="vignette"></div>
 
 <a id="back" href="../">← back</a>
 <div id="live-badge"><div id="live-dot"></div><span>live</span></div>
