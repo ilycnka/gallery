@@ -7,54 +7,38 @@
   <link rel="icon" type="image/svg+xml" href="../favicon.svg">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #000;
-      overflow: hidden;
-      -webkit-user-select: none;
-      user-select: none;
-      font-family: 'Segoe UI', sans-serif;
-    }
+    body { background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
     #video {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       width: 100%; height: 100%;
       object-fit: cover;
-      display: block;
       transform: scaleX(-1);
     }
     #overlay {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       width: 100%; height: 100%;
       z-index: 3;
       pointer-events: none;
       transform: scaleX(-1);
     }
     #back {
-      position: fixed;
-      top: 22px; left: 22px; z-index: 10;
-      font-size: 11px;
-      color: rgba(255,255,255,0.35);
-      letter-spacing: 0.10em;
-      text-decoration: none;
-      transition: color 0.2s;
+      position: fixed; top: 22px; left: 22px; z-index: 10;
+      font-size: 11px; color: rgba(255,255,255,0.35);
+      letter-spacing: 0.10em; text-decoration: none; transition: color 0.2s;
     }
     #back:hover { color: rgba(255,255,255,0.80); }
-    #live-badge {
-      position: fixed;
-      top: 22px; right: 22px; z-index: 10;
-      display: flex; align-items: center; gap: 7px;
-      font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase;
-      color: rgba(255,255,255,0.40);
-      opacity: 0; transition: opacity 0.6s;
+    .top-btn {
+      position: fixed; top: 22px; z-index: 10;
+      background: none; border: 1px solid rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.38); font-family: inherit;
+      font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase;
+      padding: 8px 18px; cursor: pointer; transition: border-color 0.2s, color 0.2s;
+      -webkit-tap-highlight-color: transparent;
     }
-    #live-badge.visible { opacity: 1; }
-    #live-dot {
-      width: 6px; height: 6px; border-radius: 50%;
-      background: #fff;
-      animation: pulse 2s ease-in-out infinite;
-    }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+    .top-btn:hover  { border-color: rgba(255,255,255,0.60); color: rgba(255,255,255,0.80); }
+    .top-btn.active { border-color: rgba(255,255,255,0.55); color: rgba(255,255,255,0.90); }
+    #btn-skeleton { right: 22px; }
+    #btn-mode     { right: 88px; }
     #message {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
@@ -64,97 +48,6 @@
       font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
       color: rgba(255,255,255,0.22);
     }
-
-    /* ── Кнопка записи жеста ── */
-    #btn-capture {
-      position: fixed;
-      bottom: 32px; left: 50%;
-      transform: translateX(-50%);
-      z-index: 10;
-      background: none;
-      border: 1px solid rgba(255,255,255,0.25);
-      color: rgba(255,255,255,0.45);
-      font-family: 'Segoe UI', sans-serif;
-      font-size: 10px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      padding: 10px 28px;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s, opacity 0.2s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    #btn-capture:hover  { border-color: rgba(255,255,255,0.65); color: rgba(255,255,255,0.85); }
-    #btn-capture.dim    { opacity: 0.28; pointer-events: none; }
-
-    /* Счётчик библиотеки */
-    #lib-count {
-      position: fixed;
-      bottom: 70px; left: 50%;
-      transform: translateX(-50%);
-      z-index: 10;
-      font-size: 9px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.20);
-      pointer-events: none;
-    }
-
-    /* ── Оверлей именования ── */
-    #name-overlay {
-      position: fixed; inset: 0; z-index: 50;
-      background: rgba(0,0,0,0.72);
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0; pointer-events: none;
-      transition: opacity 0.2s;
-    }
-    #name-overlay.open { opacity: 1; pointer-events: all; }
-
-    #name-card {
-      display: flex; flex-direction: column; gap: 18px;
-      padding: 36px 32px;
-      border: 1px solid rgba(255,255,255,0.15);
-      min-width: min(320px, 88vw);
-    }
-    #name-label {
-      font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
-      color: rgba(255,255,255,0.35);
-    }
-    #name-input {
-      background: none;
-      border: none;
-      border-bottom: 1px solid rgba(255,255,255,0.30);
-      color: #fff;
-      font-family: 'Segoe UI', sans-serif;
-      font-size: 18px;
-      font-weight: 200;
-      padding: 6px 0;
-      outline: none;
-      width: 100%;
-    }
-    #name-input::placeholder { color: rgba(255,255,255,0.18); }
-    #name-actions { display: flex; gap: 12px; justify-content: flex-end; }
-    .name-btn {
-      background: none; border: 1px solid rgba(255,255,255,0.22);
-      color: rgba(255,255,255,0.55); font-family: inherit;
-      font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase;
-      padding: 8px 20px; cursor: pointer;
-      transition: border-color 0.15s, color 0.15s;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .name-btn:hover { border-color: rgba(255,255,255,0.60); color: #fff; }
-    .name-btn.primary { border-color: rgba(255,255,255,0.50); color: rgba(255,255,255,0.85); }
-
-    /* Toast подтверждения */
-    #toast {
-      position: fixed; bottom: 90px; left: 50%;
-      transform: translateX(-50%);
-      z-index: 60;
-      font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-      color: rgba(255,255,255,0.70);
-      opacity: 0; transition: opacity 0.3s;
-      pointer-events: none;
-    }
-    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -163,37 +56,35 @@
 <canvas id="overlay"></canvas>
 
 <a id="back" href="../">← back</a>
-<div id="live-badge"><div id="live-dot"></div><span>live</span></div>
+<button id="btn-mode" class="top-btn">wheel</button>
+<button id="btn-skeleton" class="top-btn">live</button>
 <div id="message"><span id="msg-text">opening camera</span></div>
-
-<div id="lib-count"></div>
-<button id="btn-capture" class="dim">запомнить жест</button>
-
-<div id="name-overlay">
-  <div id="name-card">
-    <div id="name-label">название жеста</div>
-    <input id="name-input" type="text" placeholder="например: pinch" autocomplete="off" spellcheck="false" />
-    <div id="name-actions">
-      <button class="name-btn" id="btn-cancel">отмена</button>
-      <button class="name-btn primary" id="btn-save">сохранить</button>
-    </div>
-  </div>
-</div>
-
-<div id="toast"></div>
 
 <script src="../js/i18n.js?v=4"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 <script>
 document.getElementById('back').textContent = I18N.t('back');
-window.addEventListener('langchange', () => {
-  document.getElementById('back').textContent = I18N.t('back');
+
+let liveMode = false;
+let liveDim  = 0.90;
+
+const btnSkeleton = document.getElementById('btn-skeleton');
+btnSkeleton.addEventListener('click', () => {
+  liveMode = !liveMode;
+  video.style.opacity = liveMode ? '0' : '1';
+  btnSkeleton.classList.toggle('active', liveMode);
+});
+
+const btnMode = document.getElementById('btn-mode');
+btnMode.addEventListener('click', () => {
+  wheelMode = !wheelMode;
+  btnMode.textContent = wheelMode ? 'cube' : 'wheel';
+  btnMode.classList.toggle('active', wheelMode);
 });
 
 const video   = document.getElementById('video');
 const overlay = document.getElementById('overlay');
 const ctx     = overlay.getContext('2d');
-const badge   = document.getElementById('live-badge');
 const message = document.getElementById('message');
 const msgText = document.getElementById('msg-text');
 
@@ -201,7 +92,7 @@ function resizeOverlay() { overlay.width = window.innerWidth; overlay.height = w
 resizeOverlay();
 window.addEventListener('resize', resizeOverlay);
 
-// ── Скелет руки ──
+// Скелет руки
 const CONNECTIONS = [
   [0,1],[1,2],[2,3],[3,4],
   [0,5],[5,6],[6,7],[7,8],
@@ -210,105 +101,299 @@ const CONNECTIONS = [
   [0,17],[17,18],[18,19],[19,20],
   [5,9],[9,13],[13,17],
 ];
-const TIPS = [ {i:4,n:'1'}, {i:8,n:'2'}, {i:12,n:'3'}, {i:16,n:'4'}, {i:20,n:'5'} ];
+// Кончики пальцев: 1-5
+const TIPS = [{i:4,n:'1'},{i:8,n:'2'},{i:12,n:'3'},{i:16,n:'4'},{i:20,n:'5'}];
 const TIP_SET = new Set(TIPS.map(t => t.i));
 
 function drawHand(lm) {
   const W = overlay.width, H = overlay.height;
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  // Скелет
+  ctx.strokeStyle = 'rgba(255,255,255,0.50)';
   ctx.lineWidth = 1.2;
-  for (const [a, b] of CONNECTIONS) {
+  for (const [a,b] of CONNECTIONS) {
     ctx.beginPath();
-    ctx.moveTo(lm[a].x * W, lm[a].y * H);
-    ctx.lineTo(lm[b].x * W, lm[b].y * H);
+    ctx.moveTo(lm[a].x*W, lm[a].y*H);
+    ctx.lineTo(lm[b].x*W, lm[b].y*H);
     ctx.stroke();
   }
 
+  // Точки
   for (let i = 0; i < lm.length; i++) {
-    const x = lm[i].x * W, y = lm[i].y * H;
+    const x = lm[i].x*W, y = lm[i].y*H;
     ctx.beginPath();
-    ctx.arc(x, y, TIP_SET.has(i) ? 4.5 : 2.5, 0, Math.PI * 2);
-    ctx.fillStyle = TIP_SET.has(i) ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.60)';
+    ctx.arc(x, y, TIP_SET.has(i) ? 4.5 : 2.5, 0, Math.PI*2);
+    ctx.fillStyle = TIP_SET.has(i) ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.55)';
     ctx.fill();
   }
 
-  // Линия между 1 (большой) и 2 (указательный)
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(lm[4].x * W, lm[4].y * H);
-  ctx.lineTo(lm[8].x * W, lm[8].y * H);
-  ctx.stroke();
-
-  // Номера пальцев
-  ctx.font = '500 11px Segoe UI, sans-serif';
+  // Номера пальцев (1–5)
+  ctx.font = '500 12px Segoe UI, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  for (const { i, n } of TIPS) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillText(n, lm[i].x * W, lm[i].y * H - 10);
+  for (const {i, n} of TIPS) {
+    const x = lm[i].x*W, y = lm[i].y*H;
+    // Текст не зеркалится — локальный flip
+    ctx.save();
+    ctx.translate(x, y - 12);
+    ctx.scale(-1, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.90)';
+    ctx.fillText(n, 0, 0);
+    ctx.restore();
   }
 }
 
-// ── Куб ──
-const EDGES = [
-  [0,1],[1,2],[2,3],[3,0],
-  [4,5],[5,6],[6,7],[7,4],
-  [0,4],[1,5],[2,6],[3,7],
+// ─── 3D Куб (правая рука) ────────────────────────────────────────────────────
+
+let cubeAlpha = 0;
+let cubeAngleY = 0;
+let cubeCorners = []; // экранные координаты точек углов
+let cubeBBox = null;  // bounding box проекции для захвата
+let cubeCx = -1, cubeCy = -1; // позиция центра куба (ленивая инициализация)
+let cubeDragging = false;
+let cubeDragOffX = 0, cubeDragOffY = 0;
+let cubeAngleYVel = 0;
+let prevIndexX = null;
+let cubeScale = 1.0;     // масштаб куба — линия 1↔(2+3)
+let cubeRotX = 0.38;     // X-поворот — скролл указательным
+let cubeRotXVel = 0;     // инерция
+let prevIndexY = null;   // предыдущая Y кончика указательного
+
+// 8 вершин единичного куба (±1)
+const CV = [
+  [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
+  [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1],
 ];
+// 6 граней (индексы вершин)
+const CF = [[0,1,2,3],[4,5,6,7],[0,1,5,4],[2,3,7,6],[0,3,7,4],[1,2,6,5]];
+// 12 рёбер
+const CE = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
 
-function rotY([x,y,z], a) {
-  return [x*Math.cos(a)+z*Math.sin(a), y, -x*Math.sin(a)+z*Math.cos(a)];
-}
-function rotX([x,y,z], a) {
-  return [x, y*Math.cos(a)-z*Math.sin(a), y*Math.sin(a)+z*Math.cos(a)];
-}
-function proj([x,y,z], cx, cy) {
-  const f = 280 / (280 + z);
-  return [cx + x * f, cy + y * f];
+function projectCV(v, ax, ay, cx, cy, sz) {
+  let [x, y, z] = v;
+  // Поворот Y
+  let x1 = x*Math.cos(ay) - z*Math.sin(ay);
+  let z1 = x*Math.sin(ay) + z*Math.cos(ay);
+  // Поворот X
+  let y2 = y*Math.cos(ax) - z1*Math.sin(ax);
+  let z2 = y*Math.sin(ax) + z1*Math.cos(ax);
+  // Лёгкая перспектива
+  const s = (3.5 / (3.5 + z2)) * sz;
+  return { sx: cx + x1*s, sy: cy + y2*s, z: z2 };
 }
 
-function drawCube(cx, cy, rx, ry, alpha, s) {
-  const verts = [
-    [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
-    [-s,-s,s],[s,-s,s],[s,s,s],[-s,s,s],
-  ];
-  const pts = verts
-    .map(v => rotY(v, ry))
-    .map(v => rotX(v, rx))
-    .map(v => proj(v, cx, cy));
+function drawCube(W, H, alpha) {
+  if (cubeCx < 0) { cubeCx = W * 0.80; cubeCy = H * 0.50; }
+  const cx = cubeCx, cy = cubeCy;
+  const sz = Math.min(W, H) * 0.10 * cubeScale;
 
+  const ax = cubeRotX, ay = cubeAngleY;
+  const proj = CV.map(v => projectCV(v, ax, ay, cx, cy, sz));
+  // Сохраняем координаты точек (смещены наружу ×1.18, как и при отрисовке)
+  cubeCorners = proj.map(p => ({
+    x: cx + (p.sx - cx) * 1.18,
+    y: cy + (p.sy - cy) * 1.18,
+  }));
+  // Bounding box проекции для захвата куба
+  const xs = proj.map(p => p.sx), ys = proj.map(p => p.sy);
+  cubeBBox = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+
+  // Грани — яркий белый, полупрозрачный, сортировка по z
+  const faces = CF.map(f => ({
+    f, z: f.reduce((s,i) => s + proj[i].z, 0) / 4
+  })).sort((a,b) => a.z - b.z);
+
+  ctx.save();
   ctx.globalAlpha = alpha;
 
-  // Рёбра
-  ctx.strokeStyle = 'rgba(255,255,255,1.0)';
-  ctx.lineWidth = 2.0;
-  for (const [a, b] of EDGES) {
+  for (const { f, z } of faces) {
     ctx.beginPath();
-    ctx.moveTo(pts[a][0], pts[a][1]);
-    ctx.lineTo(pts[b][0], pts[b][1]);
-    ctx.stroke();
-  }
-
-  // Точки на углах
-  for (const [x, y] of pts) {
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,1.0)';
+    ctx.moveTo(proj[f[0]].sx, proj[f[0]].sy);
+    for (let i = 1; i < f.length; i++) ctx.lineTo(proj[f[i]].sx, proj[f[i]].sy);
+    ctx.closePath();
+    // Ближняя грань ярче
+    const bright = 0.04 + 0.11 * ((z + 1.5) / 3);
+    ctx.fillStyle = `rgba(255,255,255,${bright.toFixed(3)})`;
     ctx.fill();
   }
 
-  ctx.globalAlpha = 1;
+  // Рёбра
+  ctx.strokeStyle = 'rgba(255,255,255,0.50)';
+  ctx.lineWidth = 1;
+  for (const [a,b] of CE) {
+    ctx.beginPath();
+    ctx.moveTo(proj[a].sx, proj[a].sy);
+    ctx.lineTo(proj[b].sx, proj[b].sy);
+    ctx.stroke();
+  }
+
+  // Точки на углах — чуть вынесены наружу от центра
+  for (const p of proj) {
+    const dx = p.sx - cx, dy = p.sy - cy;
+    ctx.beginPath();
+    ctx.arc(cx + dx*1.18, cy + dy*1.18, 2.2, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fill();
+  }
+
+  ctx.restore();
 }
 
-// ── Состояние куба ──
-let cubeAlpha  = 0;
-let cubeCurS   = 42, cubeTargS = 42;
-let cubeCurRX  = 0,  cubeCurRY  = 0;
-let cubeTargRX = 0,  cubeTargRY = 0;
+// ─── Колесо (режим 2) ────────────────────────────────────────────────────────
 
-// ── MediaPipe ──
+let wheelMode       = false;   // текущий режим: false=куб, true=колесо
+let wheelAlpha      = 0;
+let wheelAngle      = 0;
+let wheelAngleVel   = 0;
+let prevThumbYW     = null;    // Y большого пальца для вращения колеса
+
+function drawWheel(W, H, alpha) {
+  const cx = W;
+  const cy = H / 2;
+  const R  = H * 0.40 * cubeScale; // размер как у куба
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth   = 1.5;
+
+  // Внешнее кольцо
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+
+  // Внутренняя ступица
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.12, 0, Math.PI * 2); ctx.stroke();
+
+  // Среднее кольцо
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2); ctx.stroke();
+
+  // Спицы
+  ctx.strokeStyle = 'rgba(255,255,255,0.70)';
+  const SPOKES = 10;
+  for (let i = 0; i < SPOKES; i++) {
+    const a = wheelAngle + (i / SPOKES) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * R * 0.12, cy + Math.sin(a) * R * 0.12);
+    ctx.lineTo(cx + Math.cos(a) * R,        cy + Math.sin(a) * R);
+    ctx.stroke();
+  }
+
+  // 6 точек снаружи обода — отступают на 14px, вращаются с колесом
+  const DOTS = 6;
+  for (let i = 0; i < DOTS; i++) {
+    const a  = wheelAngle + (i / DOTS) * Math.PI * 2;
+    const dr = R + 14;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a) * dr, cy + Math.sin(a) * dr, 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.50)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ─── Таблички drag me ────────────────────────────────────────────────────────
+
+const PANEL_W = 200, PANEL_H = 70;
+// Три таблички, начальные позиции инициализируются лениво
+const panels = [
+  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '120,200,255' },
+  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '255,160,100' },
+  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '160,255,180' },
+];
+
+function drawDragPanel(rightLm, W, H) {
+  // Ленивая инициализация позиций: треугольником в центре
+  if (panels[0].x < 0) {
+    panels[0].x = W * 0.38; panels[0].y = H * 0.25;
+    panels[1].x = W * 0.55; panels[1].y = H * 0.50;
+    panels[2].x = W * 0.38; panels[2].y = H * 0.65;
+  }
+
+  let t4x = -1, t4y = -1, t8x = -1, t8y = -1;
+  if (rightLm) {
+    t4x = rightLm[4].x * W; t4y = rightLm[4].y * H;
+    t8x = rightLm[8].x * W; t8y = rightLm[8].y * H;
+  }
+
+  for (const p of panels) {
+    // Прикреплена к углу — обновляем позицию вслед за угом куба
+    if (p.anchorCorner !== null && cubeCorners.length > 0) {
+      const c = cubeCorners[p.anchorCorner];
+      p.x = c.x - p.w / 2;
+      p.y = c.y - p.h / 2;
+    }
+
+    const inside = (fx, fy) =>
+      fx >= p.x && fx <= p.x + p.w && fy >= p.y && fy <= p.y + p.h;
+
+    const f1in = t4x >= 0 && inside(t4x, t4y);
+    const f2in = t8x >= 0 && inside(t8x, t8y);
+
+    // Захват — отцепляет от угла (только когда куб не перемещается)
+    if (!p.dragging && f1in && f2in && !cubeDragging) {
+      p.dragging = true;
+      p.anchorCorner = null;
+    }
+
+    if (p.dragging) {
+      if (!rightLm || !f1in || !f2in) {
+        p.dragging = false;
+        // Ищем ближайший угол куба к центру таблички
+        const pcx = p.x + p.w / 2, pcy = p.y + p.h / 2;
+        let best = null, bestD = 80; // порог snap в px
+        for (let ci = 0; ci < cubeCorners.length; ci++) {
+          const d = Math.hypot(cubeCorners[ci].x - pcx, cubeCorners[ci].y - pcy);
+          if (d < bestD) { bestD = d; best = ci; }
+        }
+        if (best !== null) p.anchorCorner = best;
+      } else {
+        p.x = (t4x + t8x) / 2 - p.w / 2;
+        p.y = (t4y + t8y) / 2 - p.h / 2;
+      }
+    }
+
+    const hover = f1in && f2in;
+
+    ctx.save();
+    // Карточка на кубе исчезает вместе с ним
+    ctx.globalAlpha = (p.anchorCorner !== null ? cubeAlpha : 1) * liveDim;
+    const c = p.rgb;
+    ctx.fillStyle   = p.dragging ? `rgba(${c},0.70)` : hover ? `rgba(${c},0.55)` : `rgba(${c},0.45)`;
+    ctx.strokeStyle = p.dragging ? `rgba(${c},1.00)` : hover ? `rgba(${c},0.90)` : `rgba(${c},0.75)`;
+    ctx.lineWidth   = p.dragging ? 1.5 : 1;
+
+    const r = 8, { x, y, w, h } = p;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y,     x + w, y + r,     r);
+    ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h); ctx.arcTo(x,     y + h, x,     y + h - r, r);
+    ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Текст — локальный flip
+    ctx.translate(x + w / 2, y + h / 2);
+    ctx.scale(-1, 1);
+    ctx.font = '500 13px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = p.dragging ? `rgba(${p.rgb},1.00)` : hover ? `rgba(${p.rgb},1.00)` : `rgba(${p.rgb},0.90)`;
+    ctx.fillText('DRAG ME', 0, 0);
+
+    ctx.restore();
+
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+// MediaPipe
 const isMobile = window.innerWidth < 768;
 const hands = new Hands({
   locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
@@ -320,75 +405,7 @@ hands.setOptions({
   minTrackingConfidence:  0.5,
 });
 
-let modelReady    = false;
-let lastLandmarks = null; // последние обнаруженные лендмарки для записи
-
-// ── Библиотека жестов (localStorage) ──
-const STORAGE_KEY = 'vw_gesture_library';
-function loadLibrary()  { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
-function saveLibrary(l) { localStorage.setItem(STORAGE_KEY, JSON.stringify(l)); }
-
-const btnCapture   = document.getElementById('btn-capture');
-const nameOverlay  = document.getElementById('name-overlay');
-const nameInput    = document.getElementById('name-input');
-const btnSave      = document.getElementById('btn-save');
-const btnCancel    = document.getElementById('btn-cancel');
-const libCount     = document.getElementById('lib-count');
-const toast        = document.getElementById('toast');
-
-function updateCount() {
-  const n = loadLibrary().length;
-  libCount.textContent = n ? `${n} gesture${n === 1 ? '' : 's'} saved` : '';
-}
-updateCount();
-
-let capturedLandmarks = null;
-let toastTimer = null;
-
-function showToast(msg) {
-  toast.textContent = msg;
-  toast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
-}
-
-function openNaming() {
-  nameInput.value = '';
-  nameOverlay.classList.add('open');
-  setTimeout(() => nameInput.focus(), 80);
-}
-function closeNaming() {
-  nameOverlay.classList.remove('open');
-  capturedLandmarks = null;
-}
-
-function confirmSave() {
-  const name = nameInput.value.trim();
-  if (!name || !capturedLandmarks) return;
-  const lib = loadLibrary();
-  lib.push({
-    name,
-    landmarks: capturedLandmarks,          // 21 точка {x,y,z}
-    created: new Date().toISOString(),
-  });
-  saveLibrary(lib);
-  updateCount();
-  closeNaming();
-  showToast(`"${name}" сохранён`);
-}
-
-btnCapture.addEventListener('click', () => {
-  if (!lastLandmarks) return;
-  capturedLandmarks = JSON.parse(JSON.stringify(lastLandmarks));
-  openNaming();
-});
-btnSave.addEventListener('click', confirmSave);
-btnCancel.addEventListener('click', closeNaming);
-nameInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') confirmSave();
-  if (e.key === 'Escape') closeNaming();
-});
-nameOverlay.addEventListener('click', e => { if (e.target === nameOverlay) closeNaming(); });
+let modelReady = false;
 
 hands.onResults(results => {
   if (!modelReady) { modelReady = true; message.style.display = 'none'; }
@@ -396,57 +413,169 @@ hands.onResults(results => {
   const W = overlay.width, H = overlay.height;
   ctx.clearRect(0, 0, W, H);
 
-  let rightWrist = null;
-  const anyLm = results.multiHandLandmarks?.[0] || null;
-  lastLandmarks = anyLm;
-  btnCapture.classList.toggle('dim', !anyLm);
-
-  if (results.multiHandLandmarks) {
-    for (let i = 0; i < results.multiHandLandmarks.length; i++) {
-      const lm         = results.multiHandLandmarks[i];
-      const handedness = results.multiHandedness?.[i]?.label;
-      drawHand(lm);
-      // MediaPipe при фронталке возвращает "Left" для анатомически правой руки
-      if (handedness === 'Left') {
-        rightWrist = lm[0];
-
-        // Вектор от 2 (указательный) к 1 (большой) в нормализованном 3D-пространстве
-        const vx = lm[4].x - lm[8].x;
-        const vy = lm[4].y - lm[8].y;
-        const vz = lm[4].z - lm[8].z;
-        const len = Math.sqrt(vx*vx + vy*vy + vz*vz) || 0.001;
-
-        // Размер куба — длина линии на экране
-        const px = vx * W, py = vy * H;
-        cubeTargS = Math.max(14, Math.min(140, Math.sqrt(px*px + py*py) * 0.55));
-
-        // Вращение куба = ориентация линии в 3D
-        // RX: угол возвышения (насколько линия смотрит вверх/вниз)
-        cubeTargRX = Math.asin(Math.max(-1, Math.min(1, -vy / len))) * 1.4;
-        // RY: горизонтальный азимут (линия влево/вправо + глубина)
-        cubeTargRY = Math.atan2(vx, Math.sqrt(vy*vy + vz*vz) + 0.05) * 1.6;
+  // Правая рука: MediaPipe маркирует её как "Left" из-за зеркала
+  let hasRight = false;
+  let rightLm  = null;
+  if (results.multiHandedness) {
+    for (let hi = 0; hi < results.multiHandedness.length; hi++) {
+      if (results.multiHandedness[hi].label === 'Left') {
+        hasRight = true;
+        rightLm  = results.multiHandLandmarks?.[hi] ?? null;
+        break;
       }
     }
   }
 
-  cubeAlpha = rightWrist
-    ? Math.min(1, cubeAlpha + 0.06)
-    : Math.max(0, cubeAlpha - 0.04);
+  if (rightLm) {
+    // Базовые состояния пальцев
+    const finger1down = rightLm[4].y  > rightLm[2].y;   // большой сложен
+    const finger2down = rightLm[8].y  > rightLm[5].y;
+    const finger3down = rightLm[12].y > rightLm[9].y;
+    const finger4down = rightLm[16].y > rightLm[13].y;
+    const finger5down = rightLm[20].y > rightLm[17].y;
+    const finger5up   = !finger5down;
 
-  cubeCurS  += (cubeTargS  - cubeCurS)  * 0.12;
-  cubeCurRX += (cubeTargRX - cubeCurRX) * 0.10;
-  cubeCurRY += (cubeTargRY - cubeCurRY) * 0.10;
 
-  if (cubeAlpha > 0) {
-    const t      = performance.now() / 1000;
-    const floatY = Math.sin(t * 1.6) * 10;
-    // Фиксированная позиция: левый край экрана, центр по вертикали
-    // Канвас зеркальный, поэтому рисуем справа (W * 0.85)
-    drawCube(W * 0.85, H * 0.5 + floatY, cubeCurRX, cubeCurRY, cubeAlpha, cubeCurS);
+    // Вращение колеса: 2 вытянут, 3,4,5 сложены
+    if (wheelMode && !finger2down && finger3down && finger4down && finger5down) {
+      const ty = rightLm[8].y;
+      if (prevThumbYW !== null) {
+        const delta = ty - prevThumbYW;
+        if (Math.abs(delta) > 0.003) wheelAngleVel -= delta * 1.7;
+      }
+      prevThumbYW = ty;
+    } else {
+      prevThumbYW = null;
+    }
+
+    const scrollMode  = finger3down && finger4down && finger5down && !cubeDragging && !wheelMode;
+
+    // X-поворот: скролл указательным (lm8 — кончик пальца 2)
+    const iy = rightLm[8].y;
+    if (scrollMode && prevIndexY !== null) {
+      const delta = iy - prevIndexY;
+      if (Math.abs(delta) > 0.003) cubeRotXVel += delta * 2.5;
+    }
+    prevIndexY = scrollMode ? iy : null;
+
+    // Y-поворот: горизонтальное движение указательного (lm8)
+    const ix = rightLm[8].x;
+    if (scrollMode && prevIndexX !== null) {
+      const delta = ix - prevIndexX;
+      if (Math.abs(delta) > 0.003) cubeAngleYVel -= delta * 2.5;
+    }
+    prevIndexX = scrollMode ? ix : null;
+
+    // Масштаб: пальцы 2+3 близко + 4,5 опущены → линия к пальцу 1
+    const finger2tip = rightLm[8], finger3tip = rightLm[12];
+    const dist23 = Math.hypot(finger2tip.x - finger3tip.x, finger2tip.y - finger3tip.y);
+    const pinchMode = dist23 < 0.12 && !finger1down && !finger2down && !finger3down && finger4down && finger5down && !cubeDragging;
+
+    if (pinchMode) {
+      // Общая точка между 2 и 3
+      const mpx = (finger2tip.x + finger3tip.x) / 2 * W;
+      const mpy = (finger2tip.y + finger3tip.y) / 2 * H;
+      const thumb = rightLm[4];
+      const tx1 = thumb.x * W, ty1 = thumb.y * H;
+
+      // Нарисовать линию 1 ↔ (2+3)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.70)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(mpx, mpy);
+      ctx.lineTo(tx1, ty1);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Точка схода 2+3
+      ctx.beginPath();
+      ctx.arc(mpx, mpy, 5, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fill();
+      ctx.restore();
+
+      // Длина линии → масштаб (нормализована к ширине экрана)
+      const lineLen = Math.hypot(mpx - tx1, mpy - ty1) / W;
+      const targetScale = Math.max(0.3, Math.min(6.0, lineLen * 14));
+      cubeScale += (targetScale - cubeScale) * 0.12;
+    }
+  } else {
+    prevIndexY = null;
+    prevIndexX = null;
+  }
+
+  // Инерция X (скролл)
+  cubeRotX    += cubeRotXVel;
+  cubeRotXVel *= 0.88;
+
+  // Инерция Y (горизонталь)
+  cubeAngleY    += cubeAngleYVel;
+  cubeAngleYVel *= 0.88;
+
+  // Перемещение куба: все 5 кончиков внутри bbox И сжаты вместе
+  const TIPS5 = [4, 8, 12, 16, 20];
+  if (rightLm && cubeBBox) {
+    const cx0 = TIPS5.reduce((s,i) => s + rightLm[i].x, 0) / 5;
+    const cy0 = TIPS5.reduce((s,i) => s + rightLm[i].y, 0) / 5;
+    const spread = Math.max(...TIPS5.map(i =>
+      Math.hypot(rightLm[i].x - cx0, rightLm[i].y - cy0)
+    ));
+    const together = spread < 0.06; // пальцы сжаты
+
+    const inside5 = together && TIPS5.every(i => {
+      const fx = rightLm[i].x * W, fy = rightLm[i].y * H;
+      return fx >= cubeBBox.minX && fx <= cubeBBox.maxX &&
+             fy >= cubeBBox.minY && fy <= cubeBBox.maxY;
+    });
+
+    if (!cubeDragging && inside5) {
+      cubeDragging = true;
+      const cx0 = TIPS5.reduce((s,i) => s + rightLm[i].x*W, 0) / 5;
+      const cy0 = TIPS5.reduce((s,i) => s + rightLm[i].y*H, 0) / 5;
+      cubeDragOffX = cubeCx - cx0;
+      cubeDragOffY = cubeCy - cy0;
+    }
+
+    if (cubeDragging) {
+      if (!inside5) {
+        cubeDragging = false;
+      } else {
+        const cx0 = TIPS5.reduce((s,i) => s + rightLm[i].x*W, 0) / 5;
+        const cy0 = TIPS5.reduce((s,i) => s + rightLm[i].y*H, 0) / 5;
+        cubeCx = cx0 + cubeDragOffX;
+        cubeCy = cy0 + cubeDragOffY;
+      }
+    }
+  } else if (!rightLm) {
+    cubeDragging = false;
+  }
+
+  liveDim = 0.90;
+
+  // Инерция колеса
+  wheelAngle    += wheelAngleVel;
+  wheelAngleVel *= 0.90;
+
+  // Куб и таблички — только в режиме куба
+  const cubeTarget = hasRight && !wheelMode ? 1 : 0;
+  cubeAlpha += (cubeTarget - cubeAlpha) * 0.09;
+  if (cubeAlpha > 0.01) drawCube(W, H, cubeAlpha * liveDim);
+  if (!wheelMode || cubeAlpha > 0.01) drawDragPanel(rightLm, W, H);
+
+  // Колесо — только в режиме колеса
+  const wheelTarget = hasRight && wheelMode ? 1 : 0;
+  wheelAlpha += (wheelTarget - wheelAlpha) * 0.09;
+  if (wheelAlpha > 0.01) drawWheel(W, H, wheelAlpha * liveDim);
+
+  if (results.multiHandLandmarks) {
+    for (const lm of results.multiHandLandmarks) {
+      if (liveMode) drawHand(lm);
+    }
   }
 });
 
-// ── Камера ──
+// Камера
 navigator.mediaDevices.getUserMedia({
   video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
   audio: false,
@@ -454,9 +583,7 @@ navigator.mediaDevices.getUserMedia({
 .then(stream => {
   video.srcObject = stream;
   video.addEventListener('loadedmetadata', () => {
-    badge.classList.add('visible');
     msgText.textContent = 'loading model';
-
     let running = true;
     async function loop() {
       if (!running) return;
@@ -464,7 +591,6 @@ navigator.mediaDevices.getUserMedia({
       requestAnimationFrame(loop);
     }
     loop();
-
     window.addEventListener('pagehide', () => { running = false; }, { once: true });
   });
 })
