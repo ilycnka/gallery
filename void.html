@@ -87,6 +87,11 @@
 <script src="js/i18n.js?v=4"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+window.onerror = function(msg, src, line, col, err) {
+  document.body.style.background = '#020408';
+  document.body.innerHTML = '<div style="color:#ff6060;font-family:monospace;padding:40px;font-size:13px;white-space:pre-wrap">ERROR: ' + msg + '\nLine: ' + line + '\n' + (err && err.stack ? err.stack : '') + '</div>';
+};
+
 const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || innerWidth < 768;
 I18N.addToggle('dark');
 document.getElementById('back').textContent = I18N.t('back');
