@@ -67,11 +67,9 @@
       display: flex;
       gap: 8px;
       padding: 0 32px;
-      height: 260px;
-      align-items: flex-start;
       overflow-x: auto;
       overflow-y: hidden;
-      -webkit-overflow-scrolling: touch; /* iOS инерция */
+      -webkit-overflow-scrolling: touch;
       touch-action: pan-x;
       scrollbar-width: thin;
       scrollbar-color: rgba(0,0,0,0.15) transparent;
@@ -85,8 +83,9 @@
       border-radius: 2px;
     }
 
+    /* Явная высота на ячейке — не зависит от align-items */
     .strip .c {
-      height: 100%;
+      height: 260px;
       flex-shrink: 0;
     }
     .strip .c img {
@@ -97,20 +96,15 @@
     }
 
     /* Одиночная работа */
-    .strip.solo {
-      justify-content: center;
-      height: 380px;
-    }
+    .strip.solo { justify-content: center; }
+    .strip.solo .c { height: 380px; }
 
     /* ── Мобильная ────────────────────────────────────────── */
     @media (max-width: 680px) {
       .section-header { padding: 0 16px 14px; }
-      .strip {
-        height: 190px;
-        padding: 0 16px;
-        gap: 6px;
-      }
-      .strip.solo { height: 280px; }
+      .strip { padding: 0 16px; gap: 6px; }
+      .strip .c { height: 200px; }
+      .strip.solo .c { height: 300px; }
     }
   </style>
 </head>
