@@ -11,7 +11,6 @@
     body {
       background: #fff;
       font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      overflow-x: hidden;
     }
 
     /* ── Навигация ─────────────────────────────────────────── */
@@ -71,8 +70,9 @@
       height: 260px;
       align-items: flex-start;
       overflow-x: auto;
-      overflow-y: visible;
-      /* тонкий скроллбар */
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch; /* iOS инерция */
+      touch-action: pan-x;
       scrollbar-width: thin;
       scrollbar-color: rgba(0,0,0,0.15) transparent;
       cursor: grab;
@@ -235,16 +235,6 @@
       strip.scrollLeft = scrollLeft - (x - startX);
     }, { passive: false });
 
-    // Тач-скролл уже работает нативно, но инерция через momentum
-    let touchStartX = 0, touchScrollLeft = 0;
-    strip.addEventListener('touchstart', e => {
-      touchStartX    = e.touches[0].pageX;
-      touchScrollLeft = strip.scrollLeft;
-    }, { passive: true });
-    strip.addEventListener('touchmove', e => {
-      const dx = touchStartX - e.touches[0].pageX;
-      strip.scrollLeft = touchScrollLeft + dx;
-    }, { passive: true });
   });
 </script>
 </body>
