@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Картины — VoidWall</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      color: rgba(255,255,255,0.7);
+      font-family: Tahoma, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    #back {
+      position: fixed; top: 22px; left: 22px; z-index: 50;
+      font-size: 11px; color: rgba(255,255,255,0.35);
+      letter-spacing: 0.08em; cursor: pointer;
+      text-decoration: none; transition: color 0.2s;
+    }
+    #back:hover { color: rgba(255,255,255,0.8); }
+    #title {
+      position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
+      font-size: 10px; color: rgba(255,255,255,0.22);
+      letter-spacing: 0.22em; text-transform: uppercase;
+      pointer-events: none;
+    }
+    #grid {
+      padding: 80px 40px 60px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 2px;
+      min-height: 100vh;
+      align-content: start;
+    }
+    .cell {
+      aspect-ratio: 4/3;
+      background: #111;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255,255,255,0.08);
+      font-size: 10px; letter-spacing: 0.15em;
+      text-transform: uppercase;
+      border: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .cell:hover { background: #181818; }
+  </style>
+</head>
+<body>
+  <a id="back" href="../index.html">← назад</a>
+  <div id="title">Картины</div>
+  <div id="grid">
+    <div class="cell">скоро</div>
+    <div class="cell">скоро</div>
+    <div class="cell">скоро</div>
+    <div class="cell">скоро</div>
+    <div class="cell">скоро</div>
+    <div class="cell">скоро</div>
+  </div>
+</body>
+</html>

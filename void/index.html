@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Void — VoidWall</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      overflow: hidden; background: #020408;
+      touch-action: none; user-select: none; -webkit-user-select: none;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    canvas { display: block; }
+    #back {
+      position: fixed; top: 22px; left: 22px; z-index: 50;
+      font-size: 11px; color: rgba(255,255,255,0.35); letter-spacing: 0.08em;
+      cursor: pointer; text-decoration: none; transition: color 0.2s;
+    }
+    #back:hover { color: rgba(255,255,255,0.8); }
+    #wordmark {
+      position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
+      font-size: 10px; color: rgba(255,255,255,0.22); letter-spacing: 0.22em; text-transform: uppercase;
+      z-index: 50; pointer-events: none;
+    }
+    #overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: #020408;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.55s ease;
+    }
+    #overlay.fade { opacity: 1; }
+
+    #sound-btn {
+      position: fixed; bottom: 22px; left: 22px; z-index: 50;
+      background: none; border: none; cursor: pointer;
+      padding: 4px; opacity: 0.35; transition: opacity 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #sound-btn:hover { opacity: 0.75; }
+    #sound-btn svg { display: block; width: 18px; height: 18px; }
+
+    #hint {
+      position: fixed; bottom: 9%; left: 50%; transform: translateX(-50%);
+      z-index: 50; pointer-events: none;
+      display: flex; align-items: center; gap: 9px;
+      background: rgba(10,18,32,0.72); border: 1px solid rgba(80,130,200,0.18);
+      border-radius: 20px; padding: 7px 16px 7px 12px;
+      backdrop-filter: blur(6px);
+      opacity: 0; transition: opacity 0.55s ease;
+      white-space: nowrap;
+    }
+    #hint.show { opacity: 1; }
+    #hint .hint-icon { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.75; }
+    #hint .hint-text {
+      font-size: 9px; color: #88aacc; letter-spacing: 0.16em; text-transform: uppercase;
+    }
+
+    @keyframes hint-rotate {
+      0%   { transform: rotate(0deg); }
+      80%  { transform: rotate(340deg); }
+      100% { transform: rotate(340deg); }
+    }
+    @keyframes hint-scroll {
+      0%, 100% { transform: translateY(0); opacity: 1; }
+      50%       { transform: translateY(3px); opacity: 0.4; }
+    }
+    .anim-rotate { animation: hint-rotate 2.2s ease-in-out infinite; transform-origin: center; }
+    .anim-scroll { animation: hint-scroll 1.4s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+
+<div id="overlay"></div>
+<button id="sound-btn" title="sound">
+  <svg viewBox="0 0 18 18" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6.5H6L10 3v12L6 11.5H3z"/>
+    <path id="sound-wave1" d="M12.5 6.5a3 3 0 0 1 0 5"/>
+    <path id="sound-wave2" d="M14 4.5a5.5 5.5 0 0 1 0 9"/>
+  </svg>
+</button>
+<a id="back" href="../index.html">← назад</a>
+<div id="wordmark">VoidWall</div>
+<div id="hint"></div>
+
+<canvas id="gizmo-obs-cvs" style="position:fixed;bottom:22px;right:102px;z-index:50;border-radius:50%;pointer-events:none;"></canvas>
+<canvas id="gizmo-cvs"     style="position:fixed;bottom:22px;right:22px; z-index:50;border-radius:50%;pointer-events:none;"></canvas>
+
+<video id="void-vid" autoplay playsinline muted
+  style="position:fixed;top:0;left:0;width:100%;height:100%;opacity:0;pointer-events:none;z-index:-1;object-fit:cover;transform:scaleX(-1);"></video>
+<canvas id="void-hcv"
+  style="position:fixed;inset:0;width:100%;height:100%;z-index:20;pointer-events:none;transform:scaleX(-1);"></canvas>
+
+<script src="../js/i18n.js?v=4"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || innerWidth < 768;
+I18N.addToggle('dark');
+document.getElementById('back').textContent = I18N.t('back');
+
+// ─── Сцена ───
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 0, 9);
+const renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// ─── Glow-текстура (мягкий круг) ───
+const glowTex = (function () {
+  const s = 64, cvs = document.createElement('canvas');
+  cvs.width = cvs.height = s;
+  const c = cvs.getContext('2d');
+  const g = c.createRadialGradient(s/2,s/2,0, s/2,s/2,s/2);
+  g.addColorStop(0,   'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+  g.addColorStop(1,   'rgba(255,255,255,0)');
+  c.fillStyle = g; c.fillRect(0, 0, s, s);
+  return new THREE.CanvasTexture(cvs);
+})();
+
+// ─── Группа (вращается жестами) ───
+const group = new THREE.Group();
+scene.add(group);
+
+// ─── Фоновые звёзды (в сцене — не вращаются) ───
+{
+  const pts = [];
+  for (let i = 0; i < 2400; i++) {
+    const r = 50 + Math.random() * 80;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    pts.push(
+      r * Math.sin(phi) * Math.cos(theta),
+      r * Math.sin(phi) * Math.sin(theta),
+      r * Math.cos(phi)
+    );
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xaabbee, size: 0.40, map: glowTex,
+    alphaTest: 0.01, transparent: true, opacity: 0.95,
+    sizeAttenuation: true, depthWrite: false,
+  })));
+}
+
+// ─── Солнечная система ───────────────────────────────────────────────
+// Орбиты в плоскости XZ (Y=0). Вид сверху — Y вверх.
+// Средние долготы на J2000 (1 Jan 2000 12:00 UTC) и периоды в сутках.
+const SS_J2000 = Date.UTC(2000, 0, 1, 12, 0, 0);
+
+const PLANETS = [
+  { name: 'Mercury', r:  2.4, T:    87.97, L0: 252.25, color: 0xb8b8b8, size: 0.36 },
+  { name: 'Venus',   r:  3.8, T:   224.70, L0: 181.98, color: 0xe8c87a, size: 0.48 },
+  { name: 'Earth',   r:  5.2, T:   365.25, L0: 100.46, color: 0x5aaaff, size: 0.52 },
+  { name: 'Mars',    r:  6.9, T:   686.97, L0: 355.45, color: 0xe05a2b, size: 0.40 },
+  { name: 'Jupiter', r: 10.5, T:  4332.59, L0:  34.40, color: 0xc8913a, size: 1.36 },
+  { name: 'Saturn',  r: 13.5, T: 10759.22, L0:  49.94, color: 0xe4d191, size: 1.12 },
+  { name: 'Uranus',  r: 16.5, T: 30688.50, L0: 313.23, color: 0x7de8e8, size: 0.80 },
+  { name: 'Neptune', r: 19.5, T: 60182.00, L0: 304.88, color: 0x4b70dd, size: 0.76 },
+];
+
+// Текущий угол планеты в радианах (средняя долгота)
+function planetAngle(p) {
+  const days = (Date.now() - SS_J2000) / 86400000;
+  return (p.L0 + 360 / p.T * days) * Math.PI / 180;
+}
+
+// Солнце
+{
+  // Ядро
+  const g1 = new THREE.BufferGeometry();
+  g1.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0]), 3));
+  group.add(new THREE.Points(g1, new THREE.PointsMaterial({
+    color: 0xfffbe0, size: 2.8, map: glowTex,
+    alphaTest: 0.01, transparent: true, opacity: 1.0,
+    blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+  })));
+  // Гало
+  const g2 = new THREE.BufferGeometry();
+  g2.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0]), 3));
+  group.add(new THREE.Points(g2, new THREE.PointsMaterial({
+    color: 0xffaa22, size: 8.8, map: glowTex,
+    alphaTest: 0.001, transparent: true, opacity: 0.90,
+    blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+  })));
+}
+
+// Орбиты и планеты
+const _planetMeshes = []; // { points, r, T, L0 }
+
+for (const p of PLANETS) {
+  // Орбита — тонкая линия в плоскости XZ
+  const N = 128;
+  const op = [];
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    op.push(Math.cos(a) * p.r, 0, Math.sin(a) * p.r);
+  }
+  const oGeo = new THREE.BufferGeometry();
+  oGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(op), 3));
+  group.add(new THREE.Line(oGeo, new THREE.LineBasicMaterial({
+    color: 0x4488aa, transparent: true, opacity: 0.85,
+  })));
+
+  // Планета — точка с свечением
+  const angle = planetAngle(p);
+  const px = Math.cos(angle) * p.r, pz = Math.sin(angle) * p.r;
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([px, 0, pz]), 3));
+  const mesh = new THREE.Points(pGeo, new THREE.PointsMaterial({
+    color: p.color, size: p.size, map: glowTex,
+    alphaTest: 0.01, transparent: true, opacity: 1.0,
+    blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+  }));
+  group.add(mesh);
+  _planetMeshes.push({ mesh, p });
+}
+
+// Кольца Сатурна (плоский эллипс в XZ)
+{
+  const satIdx = PLANETS.findIndex(p => p.name === 'Saturn');
+  const sat = PLANETS[satIdx];
+  const ringPts = [];
+  for (let i = 0; i <= 64; i++) {
+    const a = (i / 64) * Math.PI * 2;
+    ringPts.push(Math.cos(a) * 0.55, 0, Math.sin(a) * 0.32);
+  }
+  const rGeo = new THREE.BufferGeometry();
+  rGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ringPts), 3));
+  const ringMesh = new THREE.Line(rGeo, new THREE.LineBasicMaterial({
+    color: 0xe4d191, transparent: true, opacity: 0.95,
+  }));
+  // Кольца — дочерний объект планеты Сатурн: найдём её mesh
+  const satMesh = _planetMeshes[satIdx].mesh;
+  const angle = planetAngle(sat);
+  ringMesh.position.set(Math.cos(angle) * sat.r, 0, Math.sin(angle) * sat.r);
+  group.add(ringMesh);
+  _planetMeshes[satIdx].ring = ringMesh;
+}
+
+// ─── Зум ───
+const ZOOM_MIN = 1.5, ZOOM_MAX = 32, ZOOM_START = 24;
+let zoomTarget = ZOOM_START;
+
+window.addEventListener('wheel', e => {
+  zoomTarget = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomTarget + e.deltaY * 0.012));
+  if (hintState === 1) hideHint();
+}, { passive: true });
+
+// ─── Подсказки ───
+const hintEl = document.getElementById('hint');
+const HINTS = [
+  {
+    icon: `<svg class="hint-icon anim-rotate" viewBox="0 0 18 18" fill="none" stroke="#88aacc" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 9A6 6 0 1 1 9 3"/><polyline points="9,0.5 9,4 12.5,4"/></svg>`,
+    key: 'hint_rotate',
+  },
+  {
+    icon: `<svg class="hint-icon anim-scroll" viewBox="0 0 18 18" fill="none" stroke="#88aacc" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="2" width="7" height="12" rx="3.5"/><line x1="9" y1="5" x2="9" y2="8"/><line x1="7.5" y1="7" x2="9" y2="8.5"/><line x1="10.5" y1="7" x2="9" y2="8.5"/></svg>`,
+    key: 'hint_zoom',
+  },
+];
+let hintState = -1;
+let hintTimer = null;
+
+function showHint(state) {
+  if (hintState === state) return;
+  hintState = state;
+  const h = HINTS[state];
+  hintEl.innerHTML = h.icon + `<span class="hint-text">${I18N.t(h.key)}</span>`;
+  hintEl.classList.add('show');
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(hideHint, 5000);
+}
+function hideHint() { hintEl.classList.remove('show'); }
+
+window.addEventListener('langchange', () => {
+  if (hintState >= 0 && hintEl.classList.contains('show')) {
+    const span = hintEl.querySelector('.hint-text');
+    if (span) span.textContent = I18N.t(HINTS[hintState].key);
+  }
+  document.getElementById('back').textContent = I18N.t('back');
+});
+
+setTimeout(() => showHint(0), 1500);
+
+// ─── Вращение ───
+let drag = false, px = 0, py = 0;
+const quatTarget  = new THREE.Quaternion();
+const quatCurrent = new THREE.Quaternion();
+const qRX = new THREE.Quaternion(), qRY = new THREE.Quaternion();
+const AX  = new THREE.Vector3(1, 0, 0);
+const AY  = new THREE.Vector3(0, 1, 0);
+const AZ  = new THREE.Vector3(0, 0, 1);
+const qOrbit = new THREE.Quaternion();
+const qRZ    = new THREE.Quaternion();
+let prevHandAngle = null;
+let firstDrag = false;
+let prevP8X   = null, prevP8Y   = null;
+let prevOrbX  = null, prevOrbY  = null;
+let _stripValue  = 50;
+let _stripActive = false;
+
+
+function dragStart(x, y) {
+  drag = true; px = x; py = y;
+  if (hintState === 0) {
+    hideHint();
+    if (!firstDrag) {
+      firstDrag = true;
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(() => showHint(1), 2000);
+    }
+  }
+}
+function dragMove(x, y) {
+  if (!drag) return;
+  const rotFrac = Math.max(0.06, (camera.position.z - ZOOM_MIN) / (ZOOM_MAX - ZOOM_MIN));
+  const sens = 0.007 * rotFrac;
+  qRY.setFromAxisAngle(AY, (x - px) * sens);
+  qRX.setFromAxisAngle(AX, (y - py) * sens);
+  quatTarget.premultiply(qRY).premultiply(qRX);
+  px = x; py = y;
+}
+function dragEnd() { drag = false; }
+
+renderer.domElement.addEventListener('mousedown', e => dragStart(e.clientX, e.clientY));
+window.addEventListener('mousemove',  e => dragMove(e.clientX, e.clientY));
+window.addEventListener('mouseup',    dragEnd);
+
+let pinchDist0 = 0;
+renderer.domElement.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    pinchDist0 = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  } else {
+    const t = e.touches[0]; dragStart(t.clientX, t.clientY);
+  }
+}, { passive: true });
+window.addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    const d = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    zoomTarget = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomTarget - (d - pinchDist0) * 0.025));
+    pinchDist0 = d;
+    if (hintState === 1) hideHint();
+  } else {
+    const t = e.touches[0]; dragMove(t.clientX, t.clientY);
+  }
+}, { passive: true });
+window.addEventListener('touchend', e => { if (e.touches.length < 2) dragEnd(); }, { passive: true });
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ─── Аудио ───
+let _ac = null, _osc1 = null, _osc2 = null, _filt = null, _mGain = null;
+let _melodOsc = null, _muted = false, _targetVol = 0.016;
+
+const MELODY = [147, 175, 220, 196, 262, 165, 220, 175, 196, 247, 175, 220];
+let _noteIdx = 0;
+
+function _scheduleNote() {
+  if (!_ac || _muted) return;
+  const freq = MELODY[_noteIdx % MELODY.length];
+  _noteIdx++;
+  _melodOsc.frequency.setTargetAtTime(freq, _ac.currentTime, 0.18);
+  setTimeout(_scheduleNote, 1600 + Math.random() * 1400);
+}
+
+function _initAudio() {
+  if (_ac) return;
+  try { _ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+  _ac.resume();
+
+  _osc1 = _ac.createOscillator(); _osc1.type = 'sine';     _osc1.frequency.value = 110;
+  _osc2 = _ac.createOscillator(); _osc2.type = 'sine';     _osc2.frequency.value = 110.5;
+  _melodOsc = _ac.createOscillator(); _melodOsc.type = 'triangle'; _melodOsc.frequency.value = 220;
+  const oscSub = _ac.createOscillator(); oscSub.type = 'sine'; oscSub.frequency.value = 55;
+
+  const nLen = Math.floor(_ac.sampleRate * 4);
+  const nBuf = _ac.createBuffer(1, nLen, _ac.sampleRate);
+  const nd = nBuf.getChannelData(0);
+  for (let i = 0; i < nLen; i++) nd[i] = Math.random() * 2 - 1;
+  const noise = _ac.createBufferSource(); noise.buffer = nBuf; noise.loop = true;
+  const nFilt = _ac.createBiquadFilter(); nFilt.type = 'bandpass'; nFilt.frequency.value = 600; nFilt.Q.value = 2;
+  const nGain = _ac.createGain(); nGain.gain.value = 0.045;
+
+  const delay = _ac.createDelay(1.0); delay.delayTime.value = 0.42;
+  const delFb  = _ac.createGain(); delFb.gain.value = 0.38;
+  const delOut = _ac.createGain(); delOut.gain.value = 0.28;
+
+  _filt = _ac.createBiquadFilter(); _filt.type = 'lowpass'; _filt.frequency.value = 900; _filt.Q.value = 3;
+  _mGain = _ac.createGain(); _mGain.gain.value = 0;
+
+  const gD  = _ac.createGain(); gD.gain.value = 0.30;
+  const gD2 = _ac.createGain(); gD2.gain.value = 0.26;
+  const gM  = _ac.createGain(); gM.gain.value = 0.22;
+  const gS  = _ac.createGain(); gS.gain.value = 0.12;
+
+  _osc1.connect(gD);  gD.connect(_filt);
+  _osc2.connect(gD2); gD2.connect(_filt);
+  oscSub.connect(gS); gS.connect(_filt);
+  _melodOsc.connect(gM); gM.connect(_filt);
+  _melodOsc.connect(delay); delay.connect(delFb); delFb.connect(delay);
+  delay.connect(delOut); delOut.connect(_filt);
+  noise.connect(nFilt); nFilt.connect(nGain); nGain.connect(_filt);
+  _filt.connect(_mGain); _mGain.connect(_ac.destination);
+
+  _osc1.start(); _osc2.start(); _melodOsc.start(); oscSub.start(); noise.start();
+  _mGain.gain.linearRampToValueAtTime(_targetVol, _ac.currentTime + 2.5);
+  setTimeout(_scheduleNote, 1800);
+}
+
+const soundBtn = document.getElementById('sound-btn');
+const wave1El  = document.getElementById('sound-wave1');
+const wave2El  = document.getElementById('sound-wave2');
+
+soundBtn.addEventListener('click', () => {
+  _initAudio();
+  _muted = !_muted;
+  if (_ac) {
+    const t = _ac.currentTime;
+    _mGain.gain.setTargetAtTime(_muted ? 0 : _targetVol, t, 0.25);
+  }
+  wave1El.style.opacity = _muted ? '0.15' : '1';
+  wave2El.style.opacity = _muted ? '0.15' : '1';
+  soundBtn.style.opacity = _muted ? '0.22' : '0.35';
+});
+
+['mousedown', 'touchstart', 'wheel'].forEach(ev =>
+  window.addEventListener(ev, _initAudio, { once: true, passive: true })
+);
+
+// ─── Гизмо наблюдателя (HUD оси) ───
+const gizmoCvs = document.getElementById('gizmo-cvs');
+const GIZMO_PX  = 70;
+const gizmoDpr  = Math.min(devicePixelRatio, 2);
+gizmoCvs.width  = GIZMO_PX * gizmoDpr;
+gizmoCvs.height = GIZMO_PX * gizmoDpr;
+gizmoCvs.style.width  = GIZMO_PX + 'px';
+gizmoCvs.style.height = GIZMO_PX + 'px';
+const gCtx = gizmoCvs.getContext('2d');
+gCtx.scale(gizmoDpr, gizmoDpr);
+
+const _gAxes = [
+  { v: new THREE.Vector3(1, 0, 0), color: '#ff4444', label: 'X' },
+  { v: new THREE.Vector3(0, 1, 0), color: '#44ff88', label: 'Y' },
+  { v: new THREE.Vector3(0, 0, 1), color: '#4499ff', label: 'Z' },
+];
+
+function drawGizmo() {
+  const S = GIZMO_PX, CX = S / 2, CY = S / 2, R = S * 0.30;
+  gCtx.clearRect(0, 0, S, S);
+
+  // Фон — тёмный круг
+  gCtx.fillStyle = 'rgba(2,4,8,0.60)';
+  gCtx.beginPath();
+  gCtx.arc(CX, CY, S / 2 - 0.5, 0, Math.PI * 2);
+  gCtx.fill();
+
+  // Центральная точка
+  gCtx.fillStyle = 'rgba(255,255,255,0.22)';
+  gCtx.beginPath();
+  gCtx.arc(CX, CY, 1.5, 0, Math.PI * 2);
+  gCtx.fill();
+
+  // Проецируем оси через текущий кватернион
+  const projected = _gAxes.map(({ v, color, label }) => {
+    const r = v.clone().applyQuaternion(quatCurrent);
+    return { x: CX + r.x * R, y: CY - r.y * R, z: r.z, color, label };
+  });
+
+  // Depth sort: сначала дальние (маленький Z)
+  projected.sort((a, b) => a.z - b.z);
+
+  for (const p of projected) {
+    // Оси уходящие "за" — полупрозрачные
+    const alpha = 0.28 + 0.72 * (p.z + 1) / 2;
+    gCtx.globalAlpha = alpha;
+
+    gCtx.strokeStyle = p.color;
+    gCtx.lineWidth   = 1.5;
+    gCtx.beginPath();
+    gCtx.moveTo(CX, CY);
+    gCtx.lineTo(p.x, p.y);
+    gCtx.stroke();
+
+    gCtx.fillStyle = p.color;
+    gCtx.beginPath();
+    gCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    gCtx.fill();
+
+    // Метка по направлению от центра
+    const dx = p.x - CX, dy = p.y - CY;
+    const len = Math.hypot(dx, dy) || 1;
+    gCtx.font = '7px monospace';
+    gCtx.textAlign    = 'center';
+    gCtx.textBaseline = 'middle';
+    gCtx.fillText(p.label, p.x + (dx / len) * 8, p.y + (dy / len) * 8);
+  }
+  gCtx.globalAlpha = 1;
+}
+
+// ─── Гизмо наблюдателя (фиксированные оси X=право, Y=верх, Z=к нам) ───
+const obsGizmoCvs = document.getElementById('gizmo-obs-cvs');
+obsGizmoCvs.width  = GIZMO_PX * gizmoDpr;
+obsGizmoCvs.height = GIZMO_PX * gizmoDpr;
+obsGizmoCvs.style.width  = GIZMO_PX + 'px';
+obsGizmoCvs.style.height = GIZMO_PX + 'px';
+const obsGCtx = obsGizmoCvs.getContext('2d');
+obsGCtx.scale(gizmoDpr, gizmoDpr);
+
+(function drawObserverGizmo() {
+  const S = GIZMO_PX, CX = S / 2, CY = S / 2, R = S * 0.30;
+
+  // Фон
+  obsGCtx.fillStyle = 'rgba(2,4,8,0.60)';
+  obsGCtx.beginPath();
+  obsGCtx.arc(CX, CY, S / 2 - 0.5, 0, Math.PI * 2);
+  obsGCtx.fill();
+
+  obsGCtx.font = '7px monospace';
+  obsGCtx.textAlign    = 'center';
+  obsGCtx.textBaseline = 'middle';
+
+  // X → вправо
+  obsGCtx.strokeStyle = '#ff4444'; obsGCtx.lineWidth = 1.5;
+  obsGCtx.beginPath(); obsGCtx.moveTo(CX, CY); obsGCtx.lineTo(CX + R, CY); obsGCtx.stroke();
+  obsGCtx.fillStyle = '#ff4444';
+  obsGCtx.beginPath(); obsGCtx.arc(CX + R, CY, 3, 0, Math.PI * 2); obsGCtx.fill();
+  obsGCtx.fillText('X', CX + R + 8, CY);
+
+  // Y → вверх
+  obsGCtx.strokeStyle = '#44ff88';
+  obsGCtx.beginPath(); obsGCtx.moveTo(CX, CY); obsGCtx.lineTo(CX, CY - R); obsGCtx.stroke();
+  obsGCtx.fillStyle = '#44ff88';
+  obsGCtx.beginPath(); obsGCtx.arc(CX, CY - R, 3, 0, Math.PI * 2); obsGCtx.fill();
+  obsGCtx.fillText('Y', CX, CY - R - 8);
+
+  // Z → к наблюдателю: символ ⊙ (ось выходит прямо из экрана)
+  obsGCtx.strokeStyle = '#4499ff'; obsGCtx.lineWidth = 1.5;
+  obsGCtx.beginPath(); obsGCtx.arc(CX, CY, 5, 0, Math.PI * 2); obsGCtx.stroke();
+  obsGCtx.fillStyle = '#4499ff';
+  obsGCtx.beginPath(); obsGCtx.arc(CX, CY, 2, 0, Math.PI * 2); obsGCtx.fill();
+  obsGCtx.fillText('Z', CX - 11, CY + 11);
+})();
+
+// ─── Анимация ───
+function animate() {
+  requestAnimationFrame(animate);
+
+  quatCurrent.slerp(quatTarget, 0.08);
+  group.quaternion.copy(quatCurrent);
+
+  // Линия напрямую задаёт Z камеры: 0 = далеко (ZOOM_MAX), 100 = близко (ZOOM_MIN)
+  if (_stripActive) {
+    zoomTarget = ZOOM_MAX - (_stripValue / 100) * (ZOOM_MAX - ZOOM_MIN);
+  }
+
+  camera.position.z += (zoomTarget - camera.position.z) * 0.09;
+
+  if (_ac) {
+    const zoomFrac = Math.max(0, (ZOOM_MAX - camera.position.z) / (ZOOM_MAX - ZOOM_MIN));
+    const now = _ac.currentTime;
+    const beat = drag ? 3.0 : 0.6;
+    _osc1.frequency.setTargetAtTime(160 + zoomFrac * 200,        now, 0.4);
+    _osc2.frequency.setTargetAtTime(160 + zoomFrac * 200 + beat, now, 0.25);
+    _filt.frequency.setTargetAtTime(600 + zoomFrac * 3000,       now, 0.3);
+  }
+
+  // Обновляем позиции планет и колец в реальном времени
+  for (const { mesh, p, ring } of _planetMeshes) {
+    const a = planetAngle(p);
+    const px = Math.cos(a) * p.r, pz = Math.sin(a) * p.r;
+    const pos = mesh.geometry.attributes.position;
+    pos.setXYZ(0, px, 0, pz);
+    pos.needsUpdate = true;
+    if (ring) ring.position.set(px, 0, pz);
+  }
+
+  renderer.render(scene, camera);
+  drawGizmo();
+}
+animate();
+
+// ─── MediaPipe Hands ─────────────────────────────────────────────────────────
+
+const hcv  = document.getElementById('void-hcv');
+const hvid = document.getElementById('void-vid');
+hcv.width  = innerWidth;
+hcv.height = innerHeight;
+const hctx = hcv.getContext('2d');
+window.addEventListener('resize', () => { hcv.width = innerWidth; hcv.height = innerHeight; });
+
+const HAND_CONN = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],
+  [5,9],[9,13],[13,17],
+];
+const TIP_IDX = [4,8,12,16,20];
+
+// ─── Локальная система координат ладони ───
+// Базис строится по точкам 0 (запястье), 5 (основание указательного), 17 (основание мизинца)
+// Углы пальцев измеряются в этом пространстве — независимо от наклона руки к камере
+function getPalmBasis(lm) {
+  const o = lm[0];
+  const v1 = { x: lm[5].x-o.x,  y: lm[5].y-o.y,  z: lm[5].z-o.z  };
+  const v2 = { x: lm[17].x-o.x, y: lm[17].y-o.y, z: lm[17].z-o.z };
+  // X = normalize(v1)
+  const xn = Math.hypot(v1.x, v1.y, v1.z);
+  const X = { x: v1.x/xn, y: v1.y/xn, z: v1.z/xn };
+  // Z = normalize(v1 × v2) — нормаль к ладони
+  const cx = v1.y*v2.z-v1.z*v2.y, cy = v1.z*v2.x-v1.x*v2.z, cz = v1.x*v2.y-v1.y*v2.x;
+  const zn = Math.hypot(cx, cy, cz);
+  const Z = { x: cx/zn, y: cy/zn, z: cz/zn };
+  // Y = Z × X
+  const Y = { x: Z.y*X.z-Z.z*X.y, y: Z.z*X.x-Z.x*X.z, z: Z.x*X.y-Z.y*X.x };
+  return { o, X, Y, Z };
+}
+function toLocal(p, b) {
+  const dx = p.x-b.o.x, dy = p.y-b.o.y, dz = p.z-b.o.z;
+  return {
+    x: dx*b.X.x + dy*b.X.y + dz*b.X.z,
+    y: dx*b.Y.x + dy*b.Y.y + dz*b.Y.z,
+    z: dx*b.Z.x + dy*b.Z.y + dz*b.Z.z,
+  };
+}
+
+// Угол в проекции на плоскость ладони — без рисования
+function fingerAngle(lm, basis, tip, mcp, pip) {
+  const lTip = toLocal(lm[tip], basis);
+  const lMcp = toLocal(lm[mcp], basis);
+  const lPip = toLocal(lm[pip], basis);
+  const ax = lMcp.x-lPip.x, ay = lMcp.y-lPip.y;
+  const bx = lTip.x-lPip.x, by = lTip.y-lPip.y;
+  const cos = (ax*bx + ay*by) / (Math.hypot(ax,ay) * Math.hypot(bx,by));
+  return Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+}
+
+// Универсальный треугольник пальца: tip, mcp, pip — угол отображается при pip
+function drawFingerTriangle(lm, basis, tip, mcp, pip, stroke, shadow) {
+  const W = hcv.width, H = hcv.height;
+  const pTip = { x: lm[tip].x*W, y: lm[tip].y*H };
+  const pMcp = { x: lm[mcp].x*W, y: lm[mcp].y*H };
+  const pPip = { x: lm[pip].x*W, y: lm[pip].y*H };
+
+  hctx.save();
+  hctx.beginPath();
+  hctx.moveTo(pTip.x, pTip.y);
+  hctx.lineTo(pMcp.x, pMcp.y);
+  hctx.lineTo(pPip.x, pPip.y);
+  hctx.closePath();
+  hctx.fillStyle   = shadow.replace('0.85', '0.15');
+  hctx.fill();
+  hctx.strokeStyle = stroke;
+  hctx.lineWidth   = 1.8;
+  hctx.shadowColor = shadow;
+  hctx.shadowBlur  = 10;
+  hctx.stroke();
+
+  // Угол в проекции на плоскость ладони (локальные X,Y) — z игнорируем
+  // Так наклон всей руки не меняет угол, а сгибание пальца — меняет
+  const lTip = toLocal(lm[tip], basis);
+  const lMcp = toLocal(lm[mcp], basis);
+  const lPip = toLocal(lm[pip], basis);
+  const ax = lMcp.x-lPip.x, ay = lMcp.y-lPip.y;
+  const bx = lTip.x-lPip.x, by = lTip.y-lPip.y;
+  const cos = (ax*bx + ay*by) / (Math.hypot(ax,ay) * Math.hypot(bx,by));
+  const deg = Math.round(Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI);
+
+  hctx.shadowBlur = 0;
+  hctx.translate(pPip.x, pPip.y);
+  hctx.scale(-1, 1);
+  hctx.font = 'bold 11px monospace';
+  hctx.fillStyle = stroke;
+  hctx.textAlign = 'left'; hctx.textBaseline = 'middle';
+  hctx.fillText(deg + '°', 8, 0);
+  hctx.restore();
+}
+
+// Диапазон растяжения линии 4–8 (в нормализованных координатах)
+const STRIP_MIN = 0.05, STRIP_MAX = 0.40;
+
+// Полоска света между большим (lm[4]) и указательным (lm[8]) — со шкалой 0–100
+function drawLightStrip(lm) {
+  const W = hcv.width, H = hcv.height;
+  const x1 = lm[4].x * W, y1 = lm[4].y * H;
+  const x2 = lm[8].x * W, y2 = lm[8].y * H;
+
+  // Текущее значение 0–100 по длине линии
+  const dist = Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y);
+  const value = Math.round(Math.max(0, Math.min(100,
+    (dist - STRIP_MIN) / (STRIP_MAX - STRIP_MIN) * 100
+  )));
+  _stripValue = value;
+  const valT = value / 100; // позиция маркера вдоль линии [0..1]
+
+  // Линия
+  const grad = hctx.createLinearGradient(x1, y1, x2, y2);
+  grad.addColorStop(0,   'rgba(200,230,255,0.85)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,1.0)');
+  grad.addColorStop(1,   'rgba(200,230,255,0.85)');
+  hctx.save();
+  hctx.shadowColor = 'rgba(160,210,255,0.95)';
+  hctx.shadowBlur  = 16;
+  hctx.strokeStyle = grad;
+  hctx.lineWidth   = 2.5;
+  hctx.lineCap     = 'round';
+  hctx.beginPath();
+  hctx.moveTo(x1, y1); hctx.lineTo(x2, y2);
+  hctx.stroke();
+
+  // Перпендикуляр для рисок
+  const len = Math.hypot(x2-x1, y2-y1) || 1;
+  const nx = -(y2-y1) / len, ny = (x2-x1) / len;
+
+  hctx.shadowBlur   = 0;
+  hctx.strokeStyle  = 'rgba(200,230,255,0.7)';
+  hctx.fillStyle    = 'rgba(200,230,255,0.9)';
+  hctx.font         = '8px monospace';
+  hctx.textBaseline = 'middle';
+
+  for (let i = 0; i <= 10; i++) {
+    const t  = i / 10;
+    const px = x1 + (x2-x1) * t;
+    const py = y1 + (y2-y1) * t;
+    const isMajor = i % 5 === 0;
+    const tickLen = isMajor ? 7 : 4;
+    hctx.lineWidth = isMajor ? 1.2 : 0.7;
+    hctx.beginPath();
+    hctx.moveTo(px + nx * tickLen, py + ny * tickLen);
+    hctx.lineTo(px - nx * tickLen, py - ny * tickLen);
+    hctx.stroke();
+    if (isMajor) {
+      hctx.save();
+      hctx.translate(px + nx * 14, py + ny * 14);
+      hctx.scale(-1, 1);
+      hctx.textAlign = 'center';
+      hctx.fillText(i * 10, 0, 0);
+      hctx.restore();
+    }
+  }
+
+  // Маркер текущего значения
+  const mx = x1 + (x2-x1) * valT;
+  const my = y1 + (y2-y1) * valT;
+  hctx.shadowColor = 'rgba(255,255,255,1.0)';
+  hctx.shadowBlur  = 12;
+  hctx.fillStyle   = 'rgba(255,255,255,1.0)';
+  hctx.beginPath();
+  hctx.arc(mx, my, 5, 0, Math.PI * 2);
+  hctx.fill();
+
+  // Крупное числовое значение рядом с маркером
+  hctx.shadowBlur = 0;
+  hctx.save();
+  hctx.translate(mx + nx * 22, my + ny * 22);
+  hctx.scale(-1, 1);
+  hctx.font      = 'bold 13px monospace';
+  hctx.fillStyle = 'rgba(255,255,255,1.0)';
+  hctx.textAlign = 'center';
+  hctx.fillText(value, 0, 0);
+  hctx.restore();
+
+  hctx.restore();
+}
+
+function drawHandSkelet(lm, tipColor) {
+  const W = hcv.width, H = hcv.height;
+  hctx.strokeStyle = 'rgba(255,255,255,0.30)';
+  hctx.lineWidth = 1;
+  for (const [a,b] of HAND_CONN) {
+    hctx.beginPath();
+    hctx.moveTo(lm[a].x*W, lm[a].y*H);
+    hctx.lineTo(lm[b].x*W, lm[b].y*H);
+    hctx.stroke();
+  }
+  for (let i = 0; i < lm.length; i++) {
+    const x = lm[i].x*W, y = lm[i].y*H;
+    const isTip = TIP_IDX.includes(i);
+    hctx.beginPath();
+    hctx.arc(x, y, isTip ? 4 : 2, 0, Math.PI*2);
+    hctx.fillStyle = isTip ? tipColor : 'rgba(255,255,255,0.45)';
+    hctx.fill();
+    // Номер точки — отзеркаливаем, т.к. канвас перевёрнут по X
+    hctx.save();
+    hctx.translate(x, y);
+    hctx.scale(-1, 1);
+    hctx.font = '9px monospace';
+    hctx.fillStyle = 'rgba(255,255,255,0.75)';
+    hctx.textAlign = 'right';
+    hctx.textBaseline = 'middle';
+    hctx.fillText(i, -6, 0);
+    hctx.restore();
+  }
+}
+
+const mpHands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+});
+mpHands.setOptions({
+  maxNumHands: 2,
+  modelComplexity: isMobile ? 0 : 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence:  0.5,
+});
+
+// Сглаженные позиции landmarks — уменьшают шум z и общий джиттер
+let _prevLm = null;
+let _prevLmL = null;
+const LM_ALPHA = 0.42; // доля нового значения за кадр (ниже = плавнее, больше лаг)
+
+mpHands.onResults(results => {
+  const W = hcv.width, H = hcv.height;
+  hctx.clearRect(0, 0, W, H);
+
+  // Правая рука: MediaPipe метит как 'Left' в зеркальном виде
+  const rIdx = results.multiHandedness?.findIndex(h => h.label === 'Left') ?? -1;
+  let lmR = rIdx !== -1 ? (results.multiHandLandmarks?.[rIdx] ?? null) : null;
+
+  // Левая рука: MediaPipe метит как 'Right' в зеркальном виде
+  const lIdx = results.multiHandedness?.findIndex(h => h.label === 'Right') ?? -1;
+  let lmL = lIdx !== -1 ? (results.multiHandLandmarks?.[lIdx] ?? null) : null;
+
+  // Сглаживание правой руки
+  if (lmR) {
+    const raw = [];
+    for (let i = 0; i < lmR.length; i++) raw.push({ x: lmR[i].x, y: lmR[i].y, z: lmR[i].z });
+    if (_prevLm) {
+      for (let i = 0; i < 21; i++) {
+        raw[i].x = _prevLm[i].x * (1 - LM_ALPHA) + raw[i].x * LM_ALPHA;
+        raw[i].y = _prevLm[i].y * (1 - LM_ALPHA) + raw[i].y * LM_ALPHA;
+        raw[i].z = _prevLm[i].z * (1 - LM_ALPHA) + raw[i].z * LM_ALPHA;
+      }
+    }
+    lmR = raw; _prevLm = lmR;
+  } else {
+    _prevLm = null; prevP8X = prevP8Y = null;
+  }
+
+  // Сглаживание левой руки
+  if (lmL) {
+    const raw = [];
+    for (let i = 0; i < lmL.length; i++) raw.push({ x: lmL[i].x, y: lmL[i].y, z: lmL[i].z });
+    if (_prevLmL) {
+      for (let i = 0; i < 21; i++) {
+        raw[i].x = _prevLmL[i].x * (1 - LM_ALPHA) + raw[i].x * LM_ALPHA;
+        raw[i].y = _prevLmL[i].y * (1 - LM_ALPHA) + raw[i].y * LM_ALPHA;
+        raw[i].z = _prevLmL[i].z * (1 - LM_ALPHA) + raw[i].z * LM_ALPHA;
+      }
+    }
+    lmL = raw; _prevLmL = lmL;
+  } else {
+    _prevLmL = null; prevHandAngle = null;
+  }
+
+  if (!lmR && !lmL) return;
+
+  // ПРАВАЯ РУКА: указательный палец → орбита, только когда 12, 16, 20 ниже 8
+  if (lmR) {
+    const indexUp = lmR[12].y > lmR[8].y && lmR[16].y > lmR[8].y && lmR[20].y > lmR[8].y;
+    if (indexUp) {
+      if (prevP8X !== null) {
+        const dx = lmR[8].x - prevP8X;
+        const dy = lmR[8].y - prevP8Y;
+        qRY.setFromAxisAngle(AY, -dx * 7.0);
+        qRX.setFromAxisAngle(AX,  dy * 7.0);
+        const qOr = new THREE.Quaternion().copy(qRX).multiply(qRY);
+        quatTarget.premultiply(qOr);
+        group.position.applyQuaternion(qOr);
+      }
+      prevP8X = lmR[8].x; prevP8Y = lmR[8].y;
+    } else {
+      prevP8X = prevP8Y = null;
+    }
+    drawHandSkelet(lmR, 'rgba(255,255,255,0.65)');
+  } else {
+    prevP8X = prevP8Y = null;
+  }
+
+  // ЛЕВАЯ РУКА: линия 4→8 → зум по Z + вращение пространства по Z
+  if (lmL) {
+    _stripActive = true;
+    drawLightStrip(lmL);
+
+    const lineAngle = Math.atan2(lmL[8].y - lmL[4].y, lmL[8].x - lmL[4].x);
+    if (prevHandAngle !== null) {
+      let da = lineAngle - prevHandAngle;
+      if (da >  Math.PI) da -= Math.PI * 2;
+      if (da < -Math.PI) da += Math.PI * 2;
+      qRZ.setFromAxisAngle(AZ, da * 1.2);
+      quatTarget.premultiply(qRZ);
+    }
+    prevHandAngle = lineAngle;
+    drawHandSkelet(lmL, 'rgba(180,180,255,0.65)');
+  } else {
+    _stripActive = false; prevHandAngle = null;
+  }
+});
+
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+  audio: false,
+}).then(stream => {
+  hvid.srcObject = stream;
+  hvid.addEventListener('loadedmetadata', () => {
+    let running = true;
+    async function loop() {
+      if (!running) return;
+      if (hvid.readyState >= 2) await mpHands.send({ image: hvid });
+      requestAnimationFrame(loop);
+    }
+    loop();
+    window.addEventListener('pagehide', () => { running = false; }, { once: true });
+  });
+}).catch(() => {});
+
+window.addEventListener('pagehide', () => {
+  if (hvid.srcObject) hvid.srcObject.getTracks().forEach(t => t.stop());
+}, { once: true });
+
+</script>
+</body>
+</html>

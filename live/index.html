@@ -241,19 +241,77 @@ function drawCube(W, H, alpha) {
 
 // ─── Колесо (режим 2) ────────────────────────────────────────────────────────
 
-let wheelMode       = false;   // текущий режим: false=куб, true=колесо
+let wheelMode       = false;
 let wheelAlpha      = 0;
 let wheelAngle      = 0;
 let wheelAngleVel   = 0;
-let prevThumbYW     = null;    // Y большого пальца для вращения колеса
+let prevThumbYW     = null;
+let wheelDots       = []; // экранные координаты внешних точек спиц
+
+function applyLens(cx, cy, R, strength) {
+  // Берём только видимую часть (колесо наполовину за краем)
+  const x0 = Math.max(0, Math.floor(cx - R - 1));
+  const y0 = Math.max(0, Math.floor(cy - R - 1));
+  const x1 = Math.min(overlay.width,  Math.ceil(cx + R + 1));
+  const y1 = Math.min(overlay.height, Math.ceil(cy + R + 1));
+  const w  = x1 - x0, h = y1 - y0;
+  if (w <= 0 || h <= 0) return;
+
+  const src = ctx.getImageData(x0, y0, w, h);
+  const dst = new Uint8ClampedArray(src.data.length);
+
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const nx = (x0 + px - cx) / R;
+      const ny = (y0 + py - cy) / R;
+      const r2 = nx * nx + ny * ny;
+      const di = (py * w + px) * 4;
+
+      if (r2 >= 1) {
+        // Вне линзы — без изменений
+        dst[di] = src.data[di]; dst[di+1] = src.data[di+1];
+        dst[di+2] = src.data[di+2]; dst[di+3] = src.data[di+3];
+        continue;
+      }
+
+      // Barrel distortion: центр увеличен (выпуклая линза)
+      const r  = Math.sqrt(r2);
+      const rf = r * (1 - strength * (1 - r2));
+      const scale = r > 1e-6 ? rf / r : 1;
+
+      const srcX = (cx + nx * scale * R) - x0;
+      const srcY = (cy + ny * scale * R) - y0;
+      const ix = Math.floor(srcX), iy = Math.floor(srcY);
+      if (ix < 0 || iy < 0 || ix >= w - 1 || iy >= h - 1) continue;
+
+      const fx = srcX - ix, fy = srcY - iy;
+      for (let c = 0; c < 4; c++) {
+        const s00 = src.data[(iy*w + ix)*4 + c];
+        const s10 = src.data[(iy*w + ix+1)*4 + c];
+        const s01 = src.data[((iy+1)*w + ix)*4 + c];
+        const s11 = src.data[((iy+1)*w + ix+1)*4 + c];
+        dst[di+c] = s00*(1-fx)*(1-fy) + s10*fx*(1-fy) + s01*(1-fx)*fy + s11*fx*fy;
+      }
+    }
+  }
+  ctx.putImageData(new ImageData(dst, w, h), x0, y0);
+}
 
 function drawWheel(W, H, alpha) {
   const cx = W;
   const cy = H / 2;
   const R  = H * 0.40 * cubeScale; // размер как у куба
 
+  // Линза: искажение пространства за колесом
+  applyLens(cx, cy, R, 0.65);
+
   ctx.save();
   ctx.globalAlpha = alpha;
+
+  // Лёгкая серая заливка
+  ctx.fillStyle = 'rgba(180,180,180,0.08)';
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+
   ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth   = 1.5;
 
@@ -267,29 +325,38 @@ function drawWheel(W, H, alpha) {
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.beginPath(); ctx.arc(cx, cy, R * 0.55, 0, Math.PI * 2); ctx.stroke();
 
-  // Спицы
-  ctx.strokeStyle = 'rgba(255,255,255,0.70)';
   const SPOKES = 10;
+
+  // 6 точек снаружи обода — отступают на 14px, вращаются с колесом
+  // Точки на конце каждой спицы — снаружи обода
+  wheelDots = [];
+  for (let i = 0; i < SPOKES; i++) {
+    const a = wheelAngle + (i / SPOKES) * Math.PI * 2;
+    const dx = cx + Math.cos(a) * (R + 13);
+    const dy = cy + Math.sin(a) * (R + 13);
+    wheelDots.push({ x: dx, y: dy });
+    ctx.beginPath();
+    ctx.arc(dx, dy, 5.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.fill();
+  }
+
+  // Точки на пересечении спиц со средним кольцом
   for (let i = 0; i < SPOKES; i++) {
     const a = wheelAngle + (i / SPOKES) * Math.PI * 2;
     ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * R * 0.12, cy + Math.sin(a) * R * 0.12);
-    ctx.lineTo(cx + Math.cos(a) * R,        cy + Math.sin(a) * R);
-    ctx.stroke();
+    ctx.arc(cx + Math.cos(a) * R * 0.55, cy + Math.sin(a) * R * 0.55, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.70)';
+    ctx.fill();
   }
 
-  // 6 точек снаружи обода — отступают на 14px, вращаются с колесом
-  const DOTS = 6;
-  for (let i = 0; i < DOTS; i++) {
-    const a  = wheelAngle + (i / DOTS) * Math.PI * 2;
-    const dr = R + 14;
+  // Точки у ступицы
+  for (let i = 0; i < SPOKES; i++) {
+    const a = wheelAngle + (i / SPOKES) * Math.PI * 2;
     ctx.beginPath();
-    ctx.arc(cx + Math.cos(a) * dr, cy + Math.sin(a) * dr, 6, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.arc(cx + Math.cos(a) * R * 0.12, cy + Math.sin(a) * R * 0.12, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.50)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
   }
 
   ctx.restore();
@@ -298,12 +365,18 @@ function drawWheel(W, H, alpha) {
 // ─── Таблички drag me ────────────────────────────────────────────────────────
 
 const PANEL_W = 200, PANEL_H = 70;
+const PANEL_COLORS_WHEEL = ['255,100,120','180,120,255','100,220,255','255,210,80','120,255,180'];
 // Три таблички, начальные позиции инициализируются лениво
 const panels = [
-  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '120,200,255' },
-  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '255,160,100' },
-  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '160,255,180' },
+  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '120,200,255', pop: 0 },
+  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '255,160,100', pop: 0 },
+  { x: -1, y: -1, w: PANEL_W, h: PANEL_H, dragging: false, anchorCorner: null, rgb: '160,255,180', pop: 0 },
 ];
+
+const wheelPanels = PANEL_COLORS_WHEEL.map((rgb) => ({
+  x: -1, y: -1, w: PANEL_W, h: PANEL_H,
+  dragging: false, anchorDot: null, rgb, pop: 0,
+}));
 
 function drawDragPanel(rightLm, W, H) {
   // Ленивая инициализация позиций: треугольником в центре
@@ -358,36 +431,127 @@ function drawDragPanel(rightLm, W, H) {
 
     const hover = f1in && f2in;
 
+    // Анимация pop: масштаб + вылет влево (визуально вправо)
+    const sc  = 1 + p.pop * 0.45;
+    const off = p.pop * 35; // смещение в canvas = вылет вправо визуально
+
     ctx.save();
-    // Карточка на кубе исчезает вместе с ним
     ctx.globalAlpha = (p.anchorCorner !== null ? cubeAlpha : 1) * liveDim;
+    // Трансформируем вокруг центра карточки
+    ctx.translate(p.x + p.w / 2 - off, p.y + p.h / 2);
+    ctx.scale(sc, sc);
+
     const c = p.rgb;
     ctx.fillStyle   = p.dragging ? `rgba(${c},0.70)` : hover ? `rgba(${c},0.55)` : `rgba(${c},0.45)`;
     ctx.strokeStyle = p.dragging ? `rgba(${c},1.00)` : hover ? `rgba(${c},0.90)` : `rgba(${c},0.75)`;
-    ctx.lineWidth   = p.dragging ? 1.5 : 1;
+    ctx.lineWidth   = (p.dragging ? 1.5 : 1) / sc;
 
-    const r = 8, { x, y, w, h } = p;
+    const r = 8, hw = p.w / 2, hh = p.h / 2;
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y,     x + w, y + r,     r);
-    ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h); ctx.arcTo(x,     y + h, x,     y + h - r, r);
-    ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
+    ctx.moveTo(-hw + r, -hh);
+    ctx.lineTo( hw - r, -hh); ctx.arcTo( hw, -hh,  hw, -hh + r, r);
+    ctx.lineTo( hw,  hh - r); ctx.arcTo( hw,  hh,  hw - r,  hh, r);
+    ctx.lineTo(-hw + r,  hh); ctx.arcTo(-hw,  hh, -hw,  hh - r, r);
+    ctx.lineTo(-hw, -hh + r); ctx.arcTo(-hw, -hh, -hw + r, -hh, r);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // Текст — локальный flip
-    ctx.translate(x + w / 2, y + h / 2);
     ctx.scale(-1, 1);
-    ctx.font = '500 13px monospace';
+    ctx.font = `500 ${13 / sc}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = p.dragging ? `rgba(${p.rgb},1.00)` : hover ? `rgba(${p.rgb},1.00)` : `rgba(${p.rgb},0.90)`;
+    ctx.fillStyle = `rgba(${p.rgb},${p.dragging || hover ? 1.0 : 0.90})`;
     ctx.fillText('DRAG ME', 0, 0);
-
     ctx.restore();
+  }
+}
 
+function drawWheelPanels(rightLm, W, H) {
+  // Ленивая инициализация: рассыпаем карточки по центру
+  if (wheelPanels[0].x < 0) {
+    wheelPanels[0].x = W * 0.45; wheelPanels[0].y = H * 0.20;
+    wheelPanels[1].x = W * 0.55; wheelPanels[1].y = H * 0.38;
+    wheelPanels[2].x = W * 0.50; wheelPanels[2].y = H * 0.55;
+    wheelPanels[3].x = W * 0.45; wheelPanels[3].y = H * 0.68;
+    wheelPanels[4].x = W * 0.55; wheelPanels[4].y = H * 0.82;
+  }
+
+  let t4x = -1, t4y = -1, t8x = -1, t8y = -1;
+  if (rightLm) {
+    t4x = rightLm[4].x * W; t4y = rightLm[4].y * H;
+    t8x = rightLm[8].x * W; t8y = rightLm[8].y * H;
+  }
+
+  for (const p of wheelPanels) {
+    // Следим за точкой спицы
+    if (p.anchorDot !== null && wheelDots.length > p.anchorDot) {
+      const d = wheelDots[p.anchorDot];
+      p.x = d.x - p.w / 2;
+      p.y = d.y - p.h / 2;
+    }
+
+    const inside = (fx, fy) =>
+      fx >= p.x && fx <= p.x + p.w && fy >= p.y && fy <= p.y + p.h;
+
+    const f1in = t4x >= 0 && inside(t4x, t4y);
+    const f2in = t8x >= 0 && inside(t8x, t8y);
+
+    if (!p.dragging && f1in && f2in) {
+      p.dragging = true;
+      p.anchorDot = null;
+    }
+
+    if (p.dragging) {
+      if (!rightLm || !f1in || !f2in) {
+        p.dragging = false;
+        // Привязываем к ближайшей точке спицы
+        const pcx = p.x + p.w / 2, pcy = p.y + p.h / 2;
+        let best = null, bestD = 90;
+        for (let di = 0; di < wheelDots.length; di++) {
+          const d = Math.hypot(wheelDots[di].x - pcx, wheelDots[di].y - pcy);
+          if (d < bestD) { bestD = d; best = di; }
+        }
+        if (best !== null) p.anchorDot = best;
+      } else {
+        p.x = (t4x + t8x) / 2 - p.w / 2;
+        p.y = (t4y + t8y) / 2 - p.h / 2;
+      }
+    }
+
+    const hover = f1in && f2in;
+
+    const sc  = 1 + p.pop * 0.45;
+    const off = p.pop * 35;
+
+    ctx.save();
+    ctx.globalAlpha = wheelAlpha * liveDim;
+    ctx.translate(p.x + p.w / 2 - off, p.y + p.h / 2);
+    ctx.scale(sc, sc);
+
+    const c = p.rgb;
+    ctx.fillStyle   = p.dragging ? `rgba(${c},0.70)` : hover ? `rgba(${c},0.55)` : `rgba(${c},0.45)`;
+    ctx.strokeStyle = p.dragging ? `rgba(${c},1.00)` : hover ? `rgba(${c},0.90)` : `rgba(${c},0.75)`;
+    ctx.lineWidth   = (p.dragging ? 1.5 : 1) / sc;
+
+    const r = 8, hw = p.w / 2, hh = p.h / 2;
+    ctx.beginPath();
+    ctx.moveTo(-hw + r, -hh);
+    ctx.lineTo( hw - r, -hh); ctx.arcTo( hw, -hh,  hw, -hh + r, r);
+    ctx.lineTo( hw,  hh - r); ctx.arcTo( hw,  hh,  hw - r,  hh, r);
+    ctx.lineTo(-hw + r,  hh); ctx.arcTo(-hw,  hh, -hw,  hh - r, r);
+    ctx.lineTo(-hw, -hh + r); ctx.arcTo(-hw, -hh, -hw + r, -hh, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.scale(-1, 1);
+    ctx.font = `500 ${13 / sc}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = `rgba(${p.rgb},${p.dragging || hover ? 1.0 : 0.90})`;
+    ctx.fillText('DRAG ME', 0, 0);
+    ctx.restore();
   }
 }
 
@@ -437,11 +601,12 @@ hands.onResults(results => {
 
 
     // Вращение колеса: 2 вытянут, 3,4,5 сложены
-    if (wheelMode && !finger2down && finger3down && finger4down && finger5down) {
+    if (wheelMode && finger1down && !finger2down && finger3down && finger4down && finger5down) {
       const ty = rightLm[8].y;
       if (prevThumbYW !== null) {
         const delta = ty - prevThumbYW;
-        if (Math.abs(delta) > 0.003) wheelAngleVel -= delta * 1.7;
+        wheelAngle    -= delta * 4.0;  // прямая синхронизация
+        wheelAngleVel  = -delta * 4.0; // инерция после отпускания
       }
       prevThumbYW = ty;
     } else {
@@ -553,9 +718,27 @@ hands.onResults(results => {
 
   liveDim = 0.90;
 
+  // Жест горизонтальной параллели 1+2: вылет правой карточки
+  const activePanels = wheelMode ? wheelPanels : panels;
+  const horizParallel = rightLm &&
+    Math.abs(rightLm[4].y - rightLm[8].y) < 0.06 &&
+    Math.abs(rightLm[4].x - rightLm[8].x) > 0.12;
+
+  // Правая карточка = с минимальным x (canvas x малый = визуально правее)
+  let rightmostPanel = null;
+  if (activePanels.some(p => p.x >= 0)) {
+    rightmostPanel = activePanels.reduce((a, b) =>
+      (b.x >= 0 && (a === null || b.x < a.x)) ? b : a, null);
+  }
+
+  for (const p of activePanels) {
+    const isRightmost = horizParallel && p === rightmostPanel;
+    p.pop += ((isRightmost ? 1 : 0) - p.pop) * 0.12;
+  }
+
   // Инерция колеса
   wheelAngle    += wheelAngleVel;
-  wheelAngleVel *= 0.90;
+  wheelAngleVel *= 0.985;
 
   // Куб и таблички — только в режиме куба
   const cubeTarget = hasRight && !wheelMode ? 1 : 0;
@@ -566,7 +749,10 @@ hands.onResults(results => {
   // Колесо — только в режиме колеса
   const wheelTarget = hasRight && wheelMode ? 1 : 0;
   wheelAlpha += (wheelTarget - wheelAlpha) * 0.09;
-  if (wheelAlpha > 0.01) drawWheel(W, H, wheelAlpha * liveDim);
+  if (wheelAlpha > 0.01) {
+    drawWheel(W, H, wheelAlpha * liveDim);
+    drawWheelPanels(rightLm, W, H);
+  }
 
   if (results.multiHandLandmarks) {
     for (const lm of results.multiHandLandmarks) {

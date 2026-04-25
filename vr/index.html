@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VR интерфейсы — VoidWall</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 100vw; height: 100vh;
+      overflow: hidden;
+      font-family: Tahoma, 'MS Sans Serif', sans-serif;
+      font-size: 11px;
+      background: linear-gradient(180deg, #5090c8 0%, #78b0e0 38%, #90c860 60%, #5a8830 100%);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #window {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -54%);
+      width: min(680px, 96vw);
+      height: min(440px, 84vh);
+      display: flex; flex-direction: column;
+      border-radius: 8px 8px 4px 4px;
+      box-shadow: 3px 3px 12px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.25);
+      overflow: hidden;
+      animation: winOpen 0.18s ease-out forwards;
+    }
+    @keyframes winOpen {
+      from { opacity: 0; transform: translate(-50%, -54%) scale(0.92); }
+      to   { opacity: 1; transform: translate(-50%, -54%) scale(1); }
+    }
+
+    .titlebar {
+      height: 30px;
+      background: linear-gradient(180deg,
+        #1e5cd8 0%, #2878ee 8%, #3490f8 40%,
+        #1e78e8 41%, #1060d0 80%, #0c50c0 100%);
+      display: flex; align-items: center;
+      padding: 0 6px; gap: 5px;
+      border-radius: 7px 7px 0 0;
+      border-bottom: 1px solid #0840a8;
+      flex-shrink: 0;
+    }
+    .titlebar-icon { font-size: 15px; }
+    .titlebar-title {
+      flex: 1; color: #fff;
+      font-weight: bold; font-size: 12px;
+      text-shadow: 1px 1px 3px rgba(0,0,60,0.7);
+    }
+    .wbtn {
+      width: 22px; height: 22px; border-radius: 4px;
+      border: 1px solid rgba(0,0,80,0.4);
+      font-size: 10px; font-weight: bold;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .wbtn-min, .wbtn-max {
+      background: linear-gradient(180deg, #60a8e0 0%, #3888c8 50%, #2070b8 100%);
+    }
+    .wbtn-close {
+      background: linear-gradient(180deg, #f07070 0%, #d83030 50%, #b82020 100%);
+      margin-left: 2px;
+    }
+    .wbtn:hover { filter: brightness(1.18); }
+    .wbtn:active { filter: brightness(0.88); }
+
+    .menubar {
+      background: #ece9d8; border-bottom: 1px solid #aca899;
+      height: 22px; flex-shrink: 0;
+      display: flex; align-items: center; padding: 0 2px;
+    }
+    .menubar span {
+      padding: 2px 9px; border-radius: 2px; cursor: default;
+    }
+    .menubar span:hover { background: #316ac5; color: #fff; }
+
+    .toolbar {
+      background: linear-gradient(180deg, #fafaf8 0%, #ece9d8 100%);
+      border-bottom: 2px solid #aca899;
+      height: 36px; flex-shrink: 0;
+      display: flex; align-items: center; padding: 0 4px; gap: 1px;
+    }
+    .tbtn {
+      height: 28px; padding: 0 9px;
+      background: none; border: 1px solid transparent; border-radius: 3px;
+      cursor: pointer; display: flex; align-items: center; gap: 4px;
+      font-family: Tahoma, sans-serif; font-size: 11px;
+    }
+    .tbtn:hover {
+      background: linear-gradient(180deg, #fff 0%, #e8e0d0 100%);
+      border-color: #b0a898;
+    }
+    .tbtn.disabled { opacity: 0.4; pointer-events: none; }
+    .tsep {
+      width: 1px; height: 26px; margin: 0 3px;
+      background: linear-gradient(180deg, transparent 0%, #aca899 30%, #aca899 70%, transparent 100%);
+    }
+
+    .addressbar {
+      background: #ece9d8; border-bottom: 1px solid #aca899;
+      height: 26px; flex-shrink: 0;
+      display: flex; align-items: center; padding: 0 6px; gap: 6px;
+    }
+    .addr-label { font-size: 11px; }
+    .addr-input {
+      flex: 1; height: 18px;
+      border: 2px inset #7a7a7a; padding: 0 4px;
+      font-family: Tahoma, sans-serif; font-size: 11px;
+      background: #fff; outline: none;
+    }
+
+    .content {
+      flex: 1; display: flex; overflow: hidden; background: #fff;
+    }
+
+    .left-panel {
+      width: 176px; flex-shrink: 0;
+      background: #7695c5; border-right: 1px solid #5a78b0;
+      overflow-y: auto; padding: 4px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .task-box { border: 1px solid #3468c0; border-radius: 4px; overflow: hidden; box-shadow: 1px 1px 2px rgba(0,0,0,0.2); }
+    .task-head {
+      background: linear-gradient(180deg, #5898e8 0%, #2060c8 100%);
+      color: #fff; font-weight: bold; font-size: 11px;
+      padding: 4px 8px 4px 6px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .task-head-arrow { font-size: 7px; }
+    .task-body { background: #e8f0f8; padding: 5px 6px; font-size: 11px; }
+    .task-link {
+      display: flex; align-items: flex-start; gap: 4px;
+      color: #0040cc; text-decoration: none; padding: 2px 0; line-height: 1.3;
+    }
+    .task-link:hover { text-decoration: underline; color: #00f; }
+    .task-info { font-size: 10px; color: #333; line-height: 1.5; }
+    .task-info b { display: block; font-size: 11px; }
+
+    .file-area {
+      flex: 1; overflow-y: auto; padding: 8px;
+      display: flex; flex-wrap: wrap;
+      align-content: flex-start; gap: 2px; background: #fff;
+    }
+
+    .folder {
+      width: 80px;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 6px 4px 5px;
+      border: 1px solid transparent; border-radius: 2px;
+      cursor: pointer; text-decoration: none; color: #000;
+    }
+    .folder:hover { background: #d8ecff; border-color: #6898d0; }
+    .folder.selected { background: #c0d8f8; border-color: #3060b0; }
+    .folder-svg { width: 48px; height: 40px; display: block; }
+    .folder-label {
+      font-size: 11px; text-align: center; margin-top: 3px;
+      line-height: 1.25; word-break: break-word; max-width: 76px;
+    }
+    .folder.selected .folder-label {
+      background: #2060c0; color: #fff; padding: 1px 3px; border-radius: 1px;
+    }
+
+    .statusbar {
+      height: 22px; flex-shrink: 0;
+      background: #ece9d8; border-top: 1px solid #aca899;
+      display: flex; align-items: center; padding: 0 8px; gap: 0;
+    }
+    .status-panel {
+      height: 100%; padding: 0 8px;
+      display: flex; align-items: center;
+      border-right: 1px solid #b8b0a0; font-size: 11px;
+    }
+
+    #taskbar {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 32px;
+      background: linear-gradient(180deg, #1e78d0 0%, #2888e0 50%, #1868c0 51%, #1060b8 100%);
+      border-top: 2px solid #5098e0;
+      display: flex; align-items: center; padding: 0 4px; z-index: 1000; gap: 4px;
+    }
+    .start-btn {
+      height: 24px; padding: 0 12px 0 6px;
+      background: linear-gradient(180deg, #68c040 0%, #48a828 50%, #389018 100%);
+      border: 1px solid #287010; border-radius: 10px; cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      font-family: Tahoma, sans-serif; font-size: 13px;
+      font-weight: bold; color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+    .start-btn:hover { filter: brightness(1.12); }
+    .taskbar-sep { width: 1px; height: 24px; margin: 0 2px; background: linear-gradient(180deg, transparent, #5898d8, transparent); }
+    .taskbar-task {
+      height: 24px; padding: 0 8px;
+      background: linear-gradient(180deg, #1458a8 0%, #2878d0 100%);
+      border: 1px solid #0a3880; border-radius: 2px; cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      font-family: Tahoma, sans-serif; font-size: 11px; color: #fff; font-weight: bold;
+    }
+    .taskbar-tray {
+      margin-left: auto; height: 24px; padding: 0 8px;
+      background: linear-gradient(180deg, #0c58b0 0%, #1868c8 100%);
+      border: 1px solid #0840a0; border-radius: 2px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tray-clock { font-family: Tahoma, sans-serif; font-size: 11px; color: #fff; }
+
+    @media (max-width: 600px) { .left-panel { display: none; } }
+  </style>
+</head>
+<body>
+
+<div id="window">
+  <div class="titlebar">
+    <span class="titlebar-icon">📁</span>
+    <span class="titlebar-title">VR интерфейсы</span>
+    <button class="wbtn wbtn-min">&#x2014;</button>
+    <button class="wbtn wbtn-max">&#x25a1;</button>
+    <button class="wbtn wbtn-close">&#x2715;</button>
+  </div>
+
+  <div class="menubar">
+    <span><u>Ф</u>айл</span>
+    <span><u>П</u>равка</span>
+    <span><u>В</u>ид</span>
+    <span>Избр<u>а</u>нное</span>
+    <span>С<u>е</u>рвис</span>
+    <span>Спр<u>а</u>вка</span>
+  </div>
+
+  <div class="toolbar">
+    <button class="tbtn" onclick="window.location.href='../index.html'">
+      <span>◀</span> <span>Назад</span> <span style="font-size:8px;color:#555">▾</span>
+    </button>
+    <button class="tbtn disabled"><span>▶</span> <span>Вперёд</span></button>
+    <button class="tbtn" onclick="window.location.href='../index.html'"><span>↑</span> <span>Вверх</span></button>
+    <div class="tsep"></div>
+    <button class="tbtn"><span>🔍</span> <span>Поиск</span></button>
+    <button class="tbtn"><span>📂</span> <span>Папки</span></button>
+  </div>
+
+  <div class="addressbar">
+    <span class="addr-label">Адрес:</span>
+    <input class="addr-input" value="C:\Мои документы\VR интерфейсы" readonly />
+  </div>
+
+  <div class="content">
+    <div class="left-panel">
+      <div class="task-box">
+        <div class="task-head"><span>Задачи файлов</span><span class="task-head-arrow">▲</span></div>
+        <div class="task-body">
+          <a href="#" class="task-link"><span>📄</span><span>Создать новую папку</span></a>
+          <a href="#" class="task-link"><span>🌐</span><span>Опубликовать в Интернете</span></a>
+        </div>
+      </div>
+      <div class="task-box">
+        <div class="task-head"><span>Другие места</span><span class="task-head-arrow">▲</span></div>
+        <div class="task-body">
+          <a href="../index.html" class="task-link"><span>📁</span><span>Мои документы</span></a>
+          <a href="#" class="task-link"><span>🖥</span><span>Рабочий стол</span></a>
+          <a href="#" class="task-link"><span>💻</span><span>Мой компьютер</span></a>
+        </div>
+      </div>
+      <div class="task-box" id="detailBox">
+        <div class="task-head"><span>Сведения</span><span class="task-head-arrow">▲</span></div>
+        <div class="task-body">
+          <div class="task-info" id="detailInfo">
+            <b>VR интерфейсы</b>Системная папка<br><br>Объектов: 2
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="file-area" id="fileArea">
+
+      <a href="../live/" class="folder" data-name="Куб" data-info="Файл • рука + камера">
+        <svg class="folder-svg" viewBox="0 0 48 40" fill="none">
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="#f0c040"/>
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="url(#fga)"/>
+          <path d="M0 14 Q0 10 4 10 L16 10 L19 6 L44 6 Q48 6 48 10 L48 10 L0 10 Z" fill="#f8d860"/>
+          <rect x="1" y="11" width="46" height="26" rx="1.5" fill="none" stroke="#d09820" stroke-width="0.5" opacity="0.5"/>
+          <defs>
+            <linearGradient id="fga" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.08"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="folder-label">Куб</span>
+      </a>
+
+      <a href="../void/" class="folder" data-name="Солнечная система" data-info="Файл • жесты + пространство">
+        <svg class="folder-svg" viewBox="0 0 48 40" fill="none">
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="#f0c040"/>
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="url(#fgb)"/>
+          <path d="M0 14 Q0 10 4 10 L16 10 L19 6 L44 6 Q48 6 48 10 L48 10 L0 10 Z" fill="#f8d860"/>
+          <rect x="1" y="11" width="46" height="26" rx="1.5" fill="none" stroke="#d09820" stroke-width="0.5" opacity="0.5"/>
+          <defs>
+            <linearGradient id="fgb" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.08"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="folder-label">Солнечная система</span>
+      </a>
+
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <div class="status-panel" id="statusLeft">2 объекта</div>
+    <div class="status-panel" id="statusRight" style="border-right:none"></div>
+  </div>
+</div>
+
+<div id="taskbar">
+  <button class="start-btn" onclick="window.location.href='../index.html'">
+    <span>⊞</span> Пуск
+  </button>
+  <div class="taskbar-sep"></div>
+  <div class="taskbar-task"><span>📁</span> VR интерфейсы</div>
+  <div class="taskbar-tray">
+    <span>🔊</span>
+    <span class="tray-clock" id="clock">00:00</span>
+  </div>
+</div>
+
+<script>
+  function tick() {
+    const n = new Date();
+    document.getElementById('clock').textContent =
+      String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+  }
+  tick(); setInterval(tick, 10000);
+
+  const folders = document.querySelectorAll('.folder');
+  const statusLeft  = document.getElementById('statusLeft');
+  const statusRight = document.getElementById('statusRight');
+  const detailInfo  = document.getElementById('detailInfo');
+
+  folders.forEach(f => {
+    f.addEventListener('click', e => {
+      if (f.dataset.singleClick) { delete f.dataset.singleClick; return; }
+      e.preventDefault();
+      folders.forEach(x => x.classList.remove('selected'));
+      f.classList.add('selected');
+      statusLeft.textContent  = '1 объект выбран';
+      statusRight.textContent = f.dataset.info || '';
+      detailInfo.innerHTML = `<b>${f.dataset.name}</b>${f.dataset.info || ''}`;
+      f.dataset.singleClick = '1';
+      setTimeout(() => { delete f.dataset.singleClick; }, 500);
+    });
+    f.addEventListener('dblclick', e => {
+      e.preventDefault();
+      if (f.getAttribute('href') !== '#') window.location.href = f.getAttribute('href');
+    });
+  });
+
+  document.getElementById('fileArea').addEventListener('click', e => {
+    if (e.target === e.currentTarget) {
+      folders.forEach(x => x.classList.remove('selected'));
+      statusLeft.textContent  = '2 объекта';
+      statusRight.textContent = '';
+      detailInfo.innerHTML    = '<b>VR интерфейсы</b>Системная папка<br><br>Объектов: 2';
+    }
+  });
+
+  document.querySelector('.wbtn-close').addEventListener('click', () => {
+    window.location.href = '../index.html';
+  });
+</script>
+</body>
+</html>

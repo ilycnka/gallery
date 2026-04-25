@@ -1,379 +1,595 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>VoidWall</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мои документы</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
+      width: 100vw; height: 100vh;
       overflow: hidden;
-      background: #ffffff;
-      touch-action: none;
-      -webkit-user-select: none;
+      font-family: Tahoma, 'MS Sans Serif', sans-serif;
+      font-size: 11px;
+      background: linear-gradient(180deg, #5090c8 0%, #78b0e0 38%, #90c860 60%, #5a8830 100%);
       user-select: none;
-      font-family: 'Segoe UI', sans-serif;
+      -webkit-user-select: none;
     }
-    canvas { display: block; }
 
-    #logo {
-      position: fixed;
-      top: 13%;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: clamp(40px, 9vw, 88px);
-      font-weight: 200;
-      color: rgba(0, 0, 0, 0.055);
-      letter-spacing: -0.02em;
-      pointer-events: none;
-      z-index: 10;
+    /* ── Окно ───────────────────────────────────────────────────── */
+    #window {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -54%);
+      width: min(860px, 96vw);
+      height: min(560px, 84vh);
+      display: flex;
+      flex-direction: column;
+      border-radius: 8px 8px 4px 4px;
+      box-shadow: 3px 3px 12px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.25);
+      overflow: hidden;
+    }
+
+    /* Строка заголовка */
+    .titlebar {
+      height: 30px;
+      background: linear-gradient(180deg,
+        #1e5cd8 0%, #2878ee 8%, #3490f8 40%,
+        #1e78e8 41%, #1060d0 80%, #0c50c0 100%);
+      display: flex; align-items: center;
+      padding: 0 6px; gap: 5px;
+      border-radius: 7px 7px 0 0;
+      border-bottom: 1px solid #0840a8;
+      flex-shrink: 0;
+      cursor: default;
+    }
+    .titlebar-icon { font-size: 15px; line-height: 1; }
+    .titlebar-title {
+      flex: 1;
+      color: #fff;
+      font-weight: bold; font-size: 12px;
+      text-shadow: 1px 1px 3px rgba(0,0,60,0.7);
+    }
+    .wbtn {
+      width: 22px; height: 22px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,80,0.4);
+      font-size: 10px; font-weight: bold;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .wbtn-min, .wbtn-max {
+      background: linear-gradient(180deg, #60a8e0 0%, #3888c8 50%, #2070b8 100%);
+    }
+    .wbtn-close {
+      background: linear-gradient(180deg, #f07070 0%, #d83030 50%, #b82020 100%);
+      margin-left: 2px;
+    }
+    .wbtn:hover { filter: brightness(1.18); }
+    .wbtn:active { filter: brightness(0.88); }
+
+    /* Меню */
+    .menubar {
+      background: #ece9d8;
+      border-bottom: 1px solid #aca899;
+      height: 22px; flex-shrink: 0;
+      display: flex; align-items: center;
+      padding: 0 2px;
+    }
+    .menubar span {
+      padding: 2px 9px; border-radius: 2px;
+      cursor: default;
+    }
+    .menubar span:hover { background: #316ac5; color: #fff; }
+    .menubar span:first-child { text-decoration: underline; }
+
+    /* Панель инструментов */
+    .toolbar {
+      background: linear-gradient(180deg, #fafaf8 0%, #ece9d8 100%);
+      border-bottom: 2px solid #aca899;
+      height: 36px; flex-shrink: 0;
+      display: flex; align-items: center;
+      padding: 0 4px; gap: 1px;
+    }
+    .tbtn {
+      height: 28px; padding: 0 9px;
+      background: none; border: 1px solid transparent;
+      border-radius: 3px; cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      font-family: Tahoma, sans-serif; font-size: 11px;
       white-space: nowrap;
     }
+    .tbtn:hover {
+      background: linear-gradient(180deg, #fff 0%, #e8e0d0 100%);
+      border-color: #b0a898;
+    }
+    .tbtn:active {
+      background: linear-gradient(180deg, #ddd8c8 0%, #ece9d8 100%);
+    }
+    .tbtn-icon { font-size: 16px; }
+    .tbtn-label { font-size: 11px; }
+    .tbtn-arrow { font-size: 8px; color: #555; }
+    .tsep {
+      width: 1px; height: 26px; margin: 0 3px;
+      background: linear-gradient(180deg, transparent 0%, #aca899 30%, #aca899 70%, transparent 100%);
+    }
+    .tbtn.disabled { opacity: 0.4; pointer-events: none; }
 
-    #drag-hint {
-      position: fixed;
-      bottom: 36px;
-      left: 50%;
-      transform: translateX(-50%);
+    /* Адресная строка */
+    .addressbar {
+      background: #ece9d8;
+      border-bottom: 1px solid #aca899;
+      height: 26px; flex-shrink: 0;
+      display: flex; align-items: center;
+      padding: 0 6px; gap: 6px;
+    }
+    .addr-label { color: #000; font-size: 11px; }
+    .addr-input {
+      flex: 1; height: 18px;
+      border: 2px inset #7a7a7a;
+      padding: 0 4px;
+      font-family: Tahoma, sans-serif; font-size: 11px;
+      background: #fff; outline: none;
+      color: #000;
+    }
+    .addr-go {
+      height: 18px; padding: 0 8px;
+      background: linear-gradient(180deg, #f8f0e0 0%, #e0c888 100%);
+      border: 1px solid #a08040;
+      border-radius: 2px; cursor: pointer;
       font-size: 10px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: rgba(0,0,0,0.38);
-      pointer-events: none;
-      z-index: 10;
-      white-space: nowrap;
-      animation: hintFade 4.2s ease forwards;
     }
-    @keyframes hintFade {
-      0%   { opacity: 0; }
-      12%  { opacity: 1; }
-      70%  { opacity: 1; }
-      100% { opacity: 0; }
+    .addr-go:hover { background: linear-gradient(180deg, #fff0c0 0%, #e8d060 100%); }
+
+    /* Контент */
+    .content {
+      flex: 1; display: flex;
+      overflow: hidden;
+      background: #fff;
     }
-    #drag-hint.hidden { opacity: 0; transition: opacity 0.4s; animation: none; }
+
+    /* Левая панель задач */
+    .left-panel {
+      width: 176px; flex-shrink: 0;
+      background: #7695c5;
+      border-right: 1px solid #5a78b0;
+      overflow-y: auto;
+      padding: 4px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .left-panel::-webkit-scrollbar { width: 8px; }
+    .left-panel::-webkit-scrollbar-track { background: #7695c5; }
+    .left-panel::-webkit-scrollbar-thumb { background: #a0b8d8; border-radius: 2px; }
+
+    .task-box {
+      border: 1px solid #3468c0;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+    }
+    .task-head {
+      background: linear-gradient(180deg, #5898e8 0%, #2060c8 100%);
+      color: #fff; font-weight: bold; font-size: 11px;
+      padding: 4px 8px 4px 6px;
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: default;
+    }
+    .task-head-arrow { font-size: 7px; }
+    .task-body {
+      background: #e8f0f8;
+      padding: 5px 6px;
+      font-size: 11px;
+    }
+    .task-link {
+      display: flex; align-items: flex-start; gap: 4px;
+      color: #0040cc; text-decoration: none;
+      padding: 2px 0; line-height: 1.3;
+    }
+    .task-link:hover { text-decoration: underline; color: #0000ff; }
+    .task-link-icon { flex-shrink: 0; }
+    .task-info { font-size: 10px; color: #333; line-height: 1.5; }
+    .task-info b { display: block; font-size: 11px; }
+
+    /* Область файлов */
+    .file-area {
+      flex: 1; overflow-y: auto;
+      padding: 8px;
+      display: flex; flex-wrap: wrap;
+      align-content: flex-start; gap: 2px;
+      background: #fff;
+    }
+    .file-area::-webkit-scrollbar { width: 16px; }
+    .file-area::-webkit-scrollbar-track {
+      background: #f0ece0;
+      border-left: 1px solid #c8c0b0;
+    }
+    .file-area::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #e0d8c8 0%, #c8c0b0 100%);
+      border: 1px solid #a8a098;
+      border-radius: 2px;
+    }
+
+    .folder {
+      width: 80px;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 6px 4px 5px;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      cursor: pointer; text-decoration: none; color: #000;
+    }
+    .folder:hover {
+      background: #d8ecff;
+      border-color: #6898d0;
+    }
+    .folder.selected {
+      background: #c0d8f8;
+      border-color: #3060b0;
+    }
+    .folder:active { background: #b0ccf0; }
+    .folder-svg { width: 48px; height: 40px; display: block; }
+    .folder-label {
+      font-size: 11px; text-align: center;
+      margin-top: 3px; line-height: 1.25;
+      color: #000;
+      word-break: break-word;
+      max-width: 76px;
+    }
+    .folder.selected .folder-label {
+      background: #2060c0; color: #fff;
+      padding: 1px 3px; border-radius: 1px;
+    }
+
+    /* Строка состояния */
+    .statusbar {
+      height: 22px; flex-shrink: 0;
+      background: #ece9d8;
+      border-top: 1px solid #aca899;
+      display: flex; align-items: center;
+      padding: 0 8px; gap: 0;
+    }
+    .status-panel {
+      height: 100%; padding: 0 8px;
+      display: flex; align-items: center;
+      border-right: 1px solid #b8b0a0;
+      font-size: 11px;
+    }
+
+    /* Панель задач */
+    #taskbar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 32px;
+      background: linear-gradient(180deg, #1e78d0 0%, #2888e0 50%, #1868c0 51%, #1060b8 100%);
+      border-top: 2px solid #5098e0;
+      display: flex; align-items: center;
+      padding: 0 4px; z-index: 1000;
+      gap: 4px;
+    }
+    .start-btn {
+      height: 24px; padding: 0 12px 0 6px;
+      background: linear-gradient(180deg, #68c040 0%, #48a828 50%, #389018 100%);
+      border: 1px solid #287010;
+      border-radius: 10px; cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      font-family: Tahoma, sans-serif; font-size: 13px;
+      font-weight: bold; color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+    .start-btn:hover { filter: brightness(1.12); }
+    .start-btn:active { filter: brightness(0.9); }
+    .start-logo { font-size: 16px; }
+    .taskbar-sep {
+      width: 1px; height: 24px; margin: 0 2px;
+      background: linear-gradient(180deg, transparent, #5898d8, transparent);
+    }
+    .taskbar-task {
+      height: 24px; padding: 0 8px;
+      background: linear-gradient(180deg, #1458a8 0%, #2878d0 100%);
+      border: 1px solid #0a3880;
+      border-radius: 2px; cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      font-family: Tahoma, sans-serif; font-size: 11px; color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.15);
+      font-weight: bold;
+    }
+    .taskbar-tray {
+      margin-left: auto;
+      height: 24px; padding: 0 8px;
+      background: linear-gradient(180deg, #0c58b0 0%, #1868c8 100%);
+      border: 1px solid #0840a0;
+      border-radius: 2px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tray-clock {
+      font-family: Tahoma, sans-serif; font-size: 11px; color: #fff;
+    }
+
+    /* Анимация открытия окна */
+    @keyframes winOpen {
+      from { opacity: 0; transform: translate(-50%, -54%) scale(0.92); }
+      to   { opacity: 1; transform: translate(-50%, -54%) scale(1); }
+    }
+    #window { animation: winOpen 0.18s ease-out forwards; }
+
+    /* Мобильная адаптация */
+    @media (max-width: 600px) {
+      .left-panel { display: none; }
+      .folder { width: 72px; }
+    }
   </style>
 </head>
 <body>
 
-<div id="logo">VoidWall</div>
-<div id="drag-hint"></div>
+<!-- Окно Проводника -->
+<div id="window">
 
-<script src="js/i18n.js?v=4"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Заголовок -->
+  <div class="titlebar" id="titlebar">
+    <span class="titlebar-icon">📁</span>
+    <span class="titlebar-title">Мои документы</span>
+    <button class="wbtn wbtn-min" title="Свернуть">&#x2014;</button>
+    <button class="wbtn wbtn-max" title="Развернуть">&#x25a1;</button>
+    <button class="wbtn wbtn-close" title="Закрыть">&#x2715;</button>
+  </div>
+
+  <!-- Строка меню -->
+  <div class="menubar">
+    <span><u>Ф</u>айл</span>
+    <span><u>П</u>равка</span>
+    <span><u>В</u>ид</span>
+    <span>Избр<u>а</u>нное</span>
+    <span>С<u>е</u>рвис</span>
+    <span>Спр<u>а</u>вка</span>
+  </div>
+
+  <!-- Панель инструментов -->
+  <div class="toolbar">
+    <button class="tbtn disabled">
+      <span class="tbtn-icon">◀</span>
+      <span class="tbtn-label">Назад</span>
+      <span class="tbtn-arrow">▾</span>
+    </button>
+    <button class="tbtn disabled">
+      <span class="tbtn-icon">▶</span>
+      <span class="tbtn-label">Вперёд</span>
+      <span class="tbtn-arrow">▾</span>
+    </button>
+    <button class="tbtn disabled">
+      <span class="tbtn-icon">↑</span>
+      <span class="tbtn-label">Вверх</span>
+    </button>
+    <div class="tsep"></div>
+    <button class="tbtn">
+      <span class="tbtn-icon">🔍</span>
+      <span class="tbtn-label">Поиск</span>
+    </button>
+    <button class="tbtn">
+      <span class="tbtn-icon">📂</span>
+      <span class="tbtn-label">Папки</span>
+    </button>
+    <div class="tsep"></div>
+    <button class="tbtn">
+      <span class="tbtn-icon">⊞</span>
+      <span class="tbtn-label">Вид</span>
+      <span class="tbtn-arrow">▾</span>
+    </button>
+  </div>
+
+  <!-- Адресная строка -->
+  <div class="addressbar">
+    <span class="addr-label">Адрес:</span>
+    <input class="addr-input" id="addrInput" value="C:\Мои документы" readonly />
+    <button class="addr-go">Переход</button>
+  </div>
+
+  <!-- Основной контент -->
+  <div class="content">
+
+    <!-- Левая панель задач -->
+    <div class="left-panel">
+      <div class="task-box">
+        <div class="task-head">
+          <span>Задачи файлов</span>
+          <span class="task-head-arrow">▲</span>
+        </div>
+        <div class="task-body">
+          <a href="#" class="task-link">
+            <span class="task-link-icon">📄</span>
+            <span>Создать новую папку</span>
+          </a>
+          <a href="#" class="task-link">
+            <span class="task-link-icon">🌐</span>
+            <span>Опубликовать в Интернете</span>
+          </a>
+          <a href="#" class="task-link">
+            <span class="task-link-icon">📧</span>
+            <span>Отправить по e-mail</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="task-box">
+        <div class="task-head">
+          <span>Другие места</span>
+          <span class="task-head-arrow">▲</span>
+        </div>
+        <div class="task-body">
+          <a href="#" class="task-link">
+            <span class="task-link-icon">🖥</span>
+            <span>Рабочий стол</span>
+          </a>
+          <a href="#" class="task-link">
+            <span class="task-link-icon">📁</span>
+            <span>Общие документы</span>
+          </a>
+          <a href="#" class="task-link">
+            <span class="task-link-icon">💻</span>
+            <span>Мой компьютер</span>
+          </a>
+          <a href="#" class="task-link">
+            <span class="task-link-icon">🌐</span>
+            <span>Сетевое окружение</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="task-box" id="detailBox">
+        <div class="task-head">
+          <span>Сведения</span>
+          <span class="task-head-arrow">▲</span>
+        </div>
+        <div class="task-body">
+          <div class="task-info">
+            <b>Мои документы</b>
+            Системная папка<br><br>
+            Объектов: 3
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Область файлов -->
+    <div class="file-area" id="fileArea">
+
+      <a href="paintings/" class="folder" data-name="Картины" data-info="Папка файлов • 0 объектов">
+        <svg class="folder-svg" viewBox="0 0 48 40" fill="none">
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="#f0c040"/>
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="url(#fg)"/>
+          <path d="M0 14 Q0 10 4 10 L16 10 L19 6 L44 6 Q48 6 48 10 L48 10 L0 10 Z" fill="#f8d860"/>
+          <rect x="1" y="11" width="46" height="26" rx="1.5" fill="none" stroke="#d09820" stroke-width="0.5" opacity="0.5"/>
+          <defs>
+            <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.08"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="folder-label">Картины</span>
+      </a>
+
+      <a href="vr/" class="folder" data-name="VR интерфейсы" data-info="Папка файлов • 2 объекта">
+        <svg class="folder-svg" viewBox="0 0 48 40" fill="none">
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="#f0c040"/>
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="url(#fg2)"/>
+          <path d="M0 14 Q0 10 4 10 L16 10 L19 6 L44 6 Q48 6 48 10 L48 10 L0 10 Z" fill="#f8d860"/>
+          <rect x="1" y="11" width="46" height="26" rx="1.5" fill="none" stroke="#d09820" stroke-width="0.5" opacity="0.5"/>
+          <defs>
+            <linearGradient id="fg2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.08"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="folder-label">VR интерфейсы</span>
+      </a>
+
+      <a href="void/" class="folder" data-name="Солнечная система" data-info="Папка файлов • 1 объект">
+        <svg class="folder-svg" viewBox="0 0 48 40" fill="none">
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="#f0c040"/>
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="url(#fg3)"/>
+          <path d="M0 14 Q0 10 4 10 L16 10 L19 6 L44 6 Q48 6 48 10 L48 10 L0 10 Z" fill="#f8d860"/>
+          <rect x="1" y="11" width="46" height="26" rx="1.5" fill="none" stroke="#d09820" stroke-width="0.5" opacity="0.5"/>
+          <defs>
+            <linearGradient id="fg3" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.08"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="folder-label">Солнечная система</span>
+      </a>
+
+    </div>
+  </div>
+
+  <!-- Строка состояния -->
+  <div class="statusbar">
+    <div class="status-panel" id="statusLeft">3 объекта</div>
+    <div class="status-panel" id="statusRight" style="border-right:none"></div>
+  </div>
+
+</div>
+
+<!-- Панель задач -->
+<div id="taskbar">
+  <button class="start-btn">
+    <span class="start-logo">⊞</span> Пуск
+  </button>
+  <div class="taskbar-sep"></div>
+  <div class="taskbar-task">
+    <span>📁</span> Мои документы
+  </div>
+  <div class="taskbar-tray">
+    <span>🔊</span>
+    <span class="tray-clock" id="clock">00:00</span>
+  </div>
+</div>
+
 <script>
-const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
-I18N.addToggle('light');
-
-// ─── Подсказка ───
-const dragHint = document.getElementById('drag-hint');
-dragHint.textContent = I18N.t('hint_drag');
-window.addEventListener('langchange', () => { dragHint.textContent = I18N.t('hint_drag'); });
-function hideHint() { dragHint.classList.add('hidden'); }
-dragHint.addEventListener('animationend', hideHint);
-
-
-// ─── Сцена ───
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xffffff);
-
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 300);
-camera.position.set(0, 0, 9);
-
-const renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: 'high-performance' });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-document.body.appendChild(renderer.domElement);
-
-// ─── Волновые частицы (GPU-анимация, нет обновлений буфера каждый кадр) ───
-const PCOUNT = isMobile ? 30000 : 20000;
-const waveGeo = new THREE.BufferGeometry();
-const wPos = new Float32Array(PCOUNT * 3);
-
-for (let i = 0; i < PCOUNT; i++) {
-  wPos[i*3]   = (Math.random() - 0.5) * 46;
-  wPos[i*3+1] = (Math.random() - 0.5) * 30;
-  wPos[i*3+2] = (Math.random() - 0.5) * 30 + 9;  // начальная Z: -6..24
-}
-waveGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3));
-
-function makeParticleTex() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const ctx = c.getContext('2d');
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  g.addColorStop(0,    'rgba(120,120,120,1)');
-  g.addColorStop(0.65, 'rgba(120,120,120,1)');
-  g.addColorStop(0.85, 'rgba(120,120,120,0.4)');
-  g.addColorStop(1,    'rgba(120,120,120,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
-}
-
-// Шейдер вычисляет Z-позицию по времени — нулевая нагрузка на CPU в анимации
-const particleMat = new THREE.ShaderMaterial({
-  uniforms: {
-    uTime:  { value: 0 },
-    uMap:   { value: makeParticleTex() },
-    uSize:  { value: isMobile ? 0.022 : 0.036 },
-    uSpeed: { value: isMobile ? 18.0 : 6.48 },
-  },
-  vertexShader: `
-    uniform float uTime;
-    uniform float uSize;
-    uniform float uSpeed;
-    void main() {
-      vec3 pos = position;
-      // Зацикленное движение по Z: от -12 до 24 (диапазон 36)
-      pos.z = mod(position.z + uTime * uSpeed + 12.0, 36.0) - 12.0;
-      vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-      gl_PointSize = uSize * projectionMatrix[1][1] * 450.0 / max(0.1, -mvPos.z);
-      gl_Position = projectionMatrix * mvPos;
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D uMap;
-    void main() {
-      vec4 col = texture2D(uMap, gl_PointCoord);
-      if (col.a < 0.01) discard;
-      gl_FragColor = vec4(col.rgb, col.a * 0.55);
-    }
-  `,
-  transparent: true,
-  depthWrite: false,
-});
-scene.add(new THREE.Points(waveGeo, particleMat));
-
-// ─── Текстура надписи ───
-function createNavTexture(text, opacity, w, h) {
-  // Учитываем DPR для чёткого текста на ретина-экранах
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  const c = document.createElement('canvas');
-  c.width = w * dpr; c.height = h * dpr;
-  const ctx = c.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
-  let size = Math.round(h * 0.58);
-  ctx.font = `100 ${size}px Inter, sans-serif`;
-  while (ctx.measureText(text).width > w * 0.92 && size > 8) {
-    size -= 1;
-    ctx.font = `100 ${size}px Inter, sans-serif`;
+  // ── Часы ──────────────────────────────────────────────────────
+  function tick() {
+    const n = new Date();
+    const h = String(n.getHours()).padStart(2,'0');
+    const m = String(n.getMinutes()).padStart(2,'0');
+    document.getElementById('clock').textContent = h + ':' + m;
   }
-  ctx.fillStyle = `rgba(0,0,0,${opacity})`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, w / 2, h / 2);
-  // Отключаем мипмаппинг — он размывает текст
-  const tex = new THREE.CanvasTexture(c);
-  tex.minFilter = THREE.LinearFilter;
-  tex.generateMipmaps = false;
-  return tex;
-}
+  tick();
+  setInterval(tick, 10000);
 
-// ─── Треугольник-навигация ───
-const R = isMobile ? 1.6 : 2.2;
-const CANVAS_W = 1024, CANVAS_H = 128;
-const LABEL_H  = 0.72, LABEL_W = LABEL_H * CANVAS_W / CANVAS_H;
+  // ── Выбор папки ───────────────────────────────────────────────
+  const folders = document.querySelectorAll('.folder');
+  const statusLeft  = document.getElementById('statusLeft');
+  const statusRight = document.getElementById('statusRight');
+  const detailBox   = document.getElementById('detailBox');
 
-// Вершины равностороннего треугольника: верх, нижний-левый, нижний-правый
-const CORNERS = [
-  new THREE.Vector3(0,             R,       0),
-  new THREE.Vector3(-R * 0.866, -R * 0.5,  0),
-  new THREE.Vector3( R * 0.866, -R * 0.5,  0),
-];
+  folders.forEach(f => {
+    f.addEventListener('click', e => {
+      // Если двойной клик — навигация (href)
+      // Одиночный клик — выделение без перехода
+      if (f.dataset.singleClick) {
+        // второй клик = переход — делаем ничего, href сработает
+        delete f.dataset.singleClick;
+        return;
+      }
+      // первый клик
+      e.preventDefault();
+      folders.forEach(x => x.classList.remove('selected'));
+      f.classList.add('selected');
+      statusLeft.textContent  = '1 объект выбран';
+      statusRight.textContent = f.dataset.info || '';
+      detailBox.querySelector('.task-info').innerHTML =
+        `<b>${f.dataset.name}</b>${f.dataset.info || 'Папка файлов'}`;
+      f.dataset.singleClick = '1';
+      setTimeout(() => { delete f.dataset.singleClick; }, 500);
+    });
 
-const NAV = [
-  { i18nKey: 'nav_collections', href: 'collections', corner: 0 },
-  { i18nKey: 'nav_about',       href: 'about',       corner: 1 },
-  { i18nKey: 'nav_void',        href: 'void',        corner: 2 },
-];
-
-const triGroup = new THREE.Group();
-triGroup.position.z = -2;
-triGroup.rotation.x = Math.random() * Math.PI * 2;
-triGroup.rotation.y = Math.random() * Math.PI * 2;
-scene.add(triGroup);
-
-// Рёбра треугольника
-const edgeGeo = new THREE.BufferGeometry().setFromPoints([
-  CORNERS[0], CORNERS[1], CORNERS[2], CORNERS[0],
-]);
-triGroup.add(new THREE.Line(edgeGeo,
-  new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.72 })));
-
-const navMeshes = [];
-
-NAV.forEach(item => {
-  const tex  = createNavTexture(I18N.t(item.i18nKey), 1.0, CANVAS_W, CANVAS_H);
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(LABEL_W, LABEL_H),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
-  );
-  // Сдвиг чуть наружу от вершины
-  const v   = CORNERS[item.corner];
-  const dir = v.clone().normalize();
-  mesh.position.copy(v).addScaledVector(dir, 0.42);
-  triGroup.add(mesh);
-  navMeshes.push({ mesh, item });
-});
-
-// Чёрная точка статично под треугольником
-const dotMesh = new THREE.Mesh(
-  new THREE.CircleGeometry(isMobile ? 0.07 : 0.06, 32),
-  new THREE.MeshBasicMaterial({ color: 0x1a1a1a, side: THREE.DoubleSide })
-);
-dotMesh.position.set(0, -(R * 0.5 + 0.55), -2);
-scene.add(dotMesh);
-
-function rebuildNavTextures() {
-  navMeshes.forEach(({ mesh, item }) => {
-    mesh.material.map.dispose();
-    mesh.material.map = createNavTexture(I18N.t(item.i18nKey), 1.0, CANVAS_W, CANVAS_H);
-    mesh.material.needsUpdate = true;
+    f.addEventListener('dblclick', e => {
+      e.preventDefault();
+      if (f.getAttribute('href') && f.getAttribute('href') !== '#') {
+        window.location.href = f.getAttribute('href');
+      }
+    });
   });
-}
-// Перестраиваем текстуры когда шрифты загружены; флаг предотвращает двойной вызов
-let _fontsDone = false;
-document.fonts.ready.then(() => { _fontsDone = true; rebuildNavTextures(); });
-setTimeout(() => { if (!_fontsDone) rebuildNavTextures(); }, 800);
-window.addEventListener('langchange', rebuildNavTextures);
 
-// ─── Вращение колец ───
-let isDragging = false;
-let dragPrev   = { x: 0, y: 0 };
-let dragDist   = 0;
-let rotVelX    = 0, rotVelY = 0;
-
-const mouse       = new THREE.Vector2();
-const targetMouse = new THREE.Vector2();
-const raycaster   = new THREE.Raycaster();
-const _ndc        = new THREE.Vector2();
-const navMeshList = navMeshes.map(n => n.mesh);
-const allClickable = [...navMeshList, dotMesh];
-
-function toNDC(cx, cy) {
-  _ndc.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
-  return _ndc;
-}
-
-function handleTap(cx, cy) {
-  raycaster.setFromCamera(toNDC(cx, cy), camera);
-  const hit = raycaster.intersectObjects(allClickable)[0];
-  if (!hit) return;
-  if (hit.object === dotMesh) { window.location.href = 'live'; return; }
-  const nav = navMeshes.find(n => n.mesh === hit.object);
-  if (nav?.item.href) window.location.href = nav.item.href;
-}
-
-function dragStart(x, y) {
-  isDragging = true;
-  dragPrev   = { x, y };
-  dragDist   = 0;
-  rotVelX = rotVelY = 0;
-  hideHint();
-}
-function dragMove(x, y) {
-  if (!isDragging) return;
-  const dx = x - dragPrev.x, dy = y - dragPrev.y;
-  dragDist += Math.sqrt(dx * dx + dy * dy);
-  rotVelY = dx * 0.009;
-  rotVelX = dy * 0.009;
-  triGroup.rotation.y += rotVelY;
-  triGroup.rotation.x += rotVelX;
-  dragPrev = { x, y };
-  targetMouse.x =  (x / window.innerWidth)  * 2 - 1;
-  targetMouse.y = -(y / window.innerHeight) * 2 + 1;
-}
-function dragEnd(cx, cy) {
-  if (dragDist < 8) handleTap(cx, cy);
-  isDragging = false;
-}
-
-// Мышь
-window.addEventListener('mousedown', e => dragStart(e.clientX, e.clientY));
-window.addEventListener('mousemove', e => {
-  if (isDragging) {
-    dragMove(e.clientX, e.clientY);
-  } else {
-    targetMouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
-    targetMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(toNDC(e.clientX, e.clientY), camera);
-    const hit = raycaster.intersectObjects(allClickable)[0];
-    renderer.domElement.style.cursor =
-      (hit && (hit.object === dotMesh || navMeshes.find(n => n.mesh === hit.object)?.item.href)) ? 'pointer' : 'default';
-  }
-});
-window.addEventListener('mouseup',   e => dragEnd(e.clientX, e.clientY));
-
-// Касания
-let touchId = null;
-window.addEventListener('touchstart', e => {
-  const t = e.touches[0];
-  touchId = t.identifier;
-  dragStart(t.clientX, t.clientY);
-}, { passive: true });
-window.addEventListener('touchmove', e => {
-  for (const t of e.touches) {
-    if (t.identifier === touchId) { dragMove(t.clientX, t.clientY); break; }
-  }
-}, { passive: true });
-window.addEventListener('touchend', e => {
-  for (const t of e.changedTouches) {
-    if (t.identifier === touchId) {
-      dragEnd(t.clientX, t.clientY);
-      touchId = null;
-      break;
+  // Клик по пустому месту — снять выделение
+  document.getElementById('fileArea').addEventListener('click', e => {
+    if (e.target === e.currentTarget) {
+      folders.forEach(x => x.classList.remove('selected'));
+      statusLeft.textContent  = '3 объекта';
+      statusRight.textContent = '';
+      detailBox.querySelector('.task-info').innerHTML =
+        '<b>Мои документы</b>Системная папка<br><br>Объектов: 3';
     }
-  }
-}, { passive: true });
+  });
 
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
 
-// ─── Анимация ───
-const clock = new THREE.Clock();
-
-function animate() {
-  requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
-
-  mouse.x += (targetMouse.x - mouse.x) * 0.04;
-  mouse.y += (targetMouse.y - mouse.y) * 0.04;
-
-  // Лёгкое дыхание камеры
-  camera.position.z = 9 + Math.sin(t * 0.11) * 3.5;
-  camera.position.y =     Math.sin(t * 0.07) * 0.25;
-  camera.position.x =     Math.sin(t * 0.09) * 0.15;
-  camera.rotation.y = -mouse.x * 0.05;
-  camera.rotation.x =  mouse.y * 0.04;
-
-  // Передаём время в шейдер частиц (движение на GPU)
-  particleMat.uniforms.uTime.value = t;
-
-  // Инерция вращения треугольника
-  if (!isDragging) {
-    triGroup.rotation.y += rotVelY;
-    triGroup.rotation.x += rotVelX;
-    rotVelY *= 0.90;
-    rotVelX *= 0.90;
-  }
-
-  // Треугольник следует за камерой
-  triGroup.position.x = camera.position.x;
-  triGroup.position.y = camera.position.y;
-
-  // Надписи всегда смотрят на камеру
-  navMeshes.forEach(({ mesh }) => mesh.lookAt(camera.position));
-
-  renderer.render(scene, camera);
-}
-animate();
+  // Кнопка закрыть — скрыть окно
+  document.querySelector('.wbtn-close').addEventListener('click', () => {
+    win.style.display = 'none';
+  });
 </script>
 </body>
 </html>
