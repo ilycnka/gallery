@@ -2,63 +2,250 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Картины — VoidWall</title>
   <link rel="icon" type="image/svg+xml" href="../favicon.svg">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      background: #0a0a0a;
-      color: rgba(255,255,255,0.7);
-      font-family: Tahoma, 'Segoe UI', sans-serif;
-      min-height: 100vh;
+      background: #fff;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
       overflow-x: hidden;
     }
+
+    /* ── Навигация ─────────────────────────────────────────── */
+    #nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 44px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(0,0,0,0.07);
+      display: flex; align-items: center;
+      padding: 0 28px;
+    }
     #back {
-      position: fixed; top: 22px; left: 22px; z-index: 50;
-      font-size: 11px; color: rgba(255,255,255,0.35);
-      letter-spacing: 0.08em; cursor: pointer;
-      text-decoration: none; transition: color 0.2s;
+      font-size: 11px; color: rgba(0,0,0,0.38);
+      text-decoration: none; letter-spacing: 0.06em;
+      transition: color 0.2s;
     }
-    #back:hover { color: rgba(255,255,255,0.8); }
-    #title {
-      position: fixed; top: 22px; left: 50%; transform: translateX(-50%);
-      font-size: 10px; color: rgba(255,255,255,0.22);
-      letter-spacing: 0.22em; text-transform: uppercase;
-      pointer-events: none;
+    #back:hover { color: #000; }
+    #nav-title {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      font-size: 11px; letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(0,0,0,0.3);
     }
-    #grid {
-      padding: 80px 40px 60px;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 2px;
-      min-height: 100vh;
-      align-content: start;
+
+    /* ── Страница ─────────────────────────────────────────── */
+    #page {
+      padding-top: 72px;
+      padding-bottom: 100px;
     }
-    .cell {
-      aspect-ratio: 4/3;
-      background: #111;
-      display: flex; align-items: center; justify-content: center;
-      color: rgba(255,255,255,0.08);
-      font-size: 10px; letter-spacing: 0.15em;
-      text-transform: uppercase;
-      border: 1px solid rgba(255,255,255,0.04);
-      cursor: pointer;
-      transition: background 0.3s;
+
+    /* ── Секция ──────────────────────────────────────────── */
+    .section {
+      margin-bottom: 56px;
     }
-    .cell:hover { background: #181818; }
+
+    .section-header {
+      display: flex; align-items: center; gap: 14px;
+      padding: 0 32px 16px;
+    }
+    .section-name {
+      font-size: 10px; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(0,0,0,0.3);
+      white-space: nowrap;
+    }
+    .section-line {
+      flex: 1; height: 1px; background: rgba(0,0,0,0.08);
+    }
+    .section-count {
+      font-size: 10px; color: rgba(0,0,0,0.2);
+    }
+
+    /* ── Горизонтальная полоса ───────────────────────────── */
+    .strip {
+      display: flex;
+      gap: 8px;
+      padding: 0 32px;
+      height: 260px;
+      align-items: flex-start;
+      overflow-x: auto;
+      overflow-y: visible;
+      /* тонкий скроллбар */
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0,0,0,0.15) transparent;
+      cursor: grab;
+    }
+    .strip:active { cursor: grabbing; }
+    .strip::-webkit-scrollbar { height: 3px; }
+    .strip::-webkit-scrollbar-track { background: transparent; }
+    .strip::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.15);
+      border-radius: 2px;
+    }
+
+    .strip .c {
+      height: 100%;
+      flex-shrink: 0;
+    }
+    .strip .c img {
+      height: 100%;
+      width: auto;
+      display: block;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      pointer-events: none; /* не мешает drag */
+    }
+    .strip .c img.loaded { opacity: 1; }
+
+    /* Одиночная работа */
+    .strip.solo {
+      justify-content: center;
+      height: 380px;
+    }
+
+    /* ── Мобильная ────────────────────────────────────────── */
+    @media (max-width: 680px) {
+      .section-header { padding: 0 16px 14px; }
+      .strip {
+        height: 190px;
+        padding: 0 16px;
+        gap: 6px;
+      }
+      .strip.solo { height: 280px; }
+    }
   </style>
 </head>
 <body>
+
+<div id="nav">
   <a id="back" href="../index.html">← назад</a>
-  <div id="title">Картины</div>
-  <div id="grid">
-    <div class="cell">скоро</div>
-    <div class="cell">скоро</div>
-    <div class="cell">скоро</div>
-    <div class="cell">скоро</div>
-    <div class="cell">скоро</div>
-    <div class="cell">скоро</div>
+  <span id="nav-title">Картины</span>
+</div>
+
+<div id="page">
+
+  <!-- ══════════════ BANGKOK ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-name">Bangkok</span>
+      <div class="section-line"></div>
+      <span class="section-count">9</span>
+    </div>
+    <div class="strip">
+      <div class="c"><img src="../assets/images/Bangkok%20%20banyan-street.jpg"   loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20cafe-window.jpg"     loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20downtown.jpg"        loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20mahanakhon.jpg"      loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20rooftop-view.jpg"    loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20temple.jpg"          loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20the-shop.jpg"        loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20tower-riverside.jpg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Bangkok%20%20trees-and-glass.jpg" loading="lazy" alt=""></div>
+    </div>
   </div>
+
+  <!-- ══════════════ CHINA ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-name">China</span>
+      <div class="section-line"></div>
+      <span class="section-count">7</span>
+    </div>
+    <div class="strip">
+      <div class="c"><img src="../assets/images/China%20%20_5558.jpeg"  loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/China%20%20_6262.jpeg"  loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/China%20%20_6264.jpeg"  loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/China%20%20_6265.jpeg"  loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/China%20%20_6266.jpeg"  loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/China%20%20_6267.jpeg"  loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/China%20%20_6268.jpeg"  loading="lazy" alt=""></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ LIGHT ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-name">Light</span>
+      <div class="section-line"></div>
+      <span class="section-count">1</span>
+    </div>
+    <div class="strip solo">
+      <div class="c"><img src="../assets/images/light.jpeg" loading="lazy" alt=""></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ LAKE AND HILLS ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-name">Lake and Hills</span>
+      <div class="section-line"></div>
+      <span class="section-count">5</span>
+    </div>
+    <div class="strip">
+      <div class="c"><img src="../assets/images/lake%20and%20hills%20%20_7439.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/lake%20and%20hills%20%20_7440.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/lake%20and%20hills%2011.35.20.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/lake%20and%20hills%20%20_7441.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/lake%20and%20hills%20%20_7442.jpeg" loading="lazy" alt=""></div>
+    </div>
+  </div>
+
+  <!-- ══════════════ DARLING ══════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-name">Darling</span>
+      <div class="section-line"></div>
+      <span class="section-count">6</span>
+    </div>
+    <div class="strip">
+      <div class="c"><img src="../assets/images/Darling%20%20_7626.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Darling%20%20_7627.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Darling%20%20_7628.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Darling%20%20_7986.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Darling%20%20_7987.jpeg" loading="lazy" alt=""></div>
+      <div class="c"><img src="../assets/images/Darling%20%20_7988.jpeg" loading="lazy" alt=""></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Плавное появление
+  document.querySelectorAll('img').forEach(img => {
+    if (img.complete && img.naturalWidth) img.classList.add('loaded');
+    else img.addEventListener('load', () => img.classList.add('loaded'));
+  });
+
+  // Drag-to-scroll для каждой полосы
+  document.querySelectorAll('.strip').forEach(strip => {
+    let down = false, startX = 0, scrollLeft = 0;
+
+    strip.addEventListener('mousedown', e => {
+      down = true;
+      startX = e.pageX - strip.offsetLeft;
+      scrollLeft = strip.scrollLeft;
+    });
+    window.addEventListener('mouseup',   () => { down = false; });
+    window.addEventListener('mousemove', e => {
+      if (!down) return;
+      e.preventDefault();
+      const x = e.pageX - strip.offsetLeft;
+      strip.scrollLeft = scrollLeft - (x - startX);
+    }, { passive: false });
+
+    // Тач-скролл уже работает нативно, но инерция через momentum
+    let touchStartX = 0, touchScrollLeft = 0;
+    strip.addEventListener('touchstart', e => {
+      touchStartX    = e.touches[0].pageX;
+      touchScrollLeft = strip.scrollLeft;
+    }, { passive: true });
+    strip.addEventListener('touchmove', e => {
+      const dx = touchStartX - e.touches[0].pageX;
+      strip.scrollLeft = touchScrollLeft + dx;
+    }, { passive: true });
+  });
+</script>
 </body>
 </html>
