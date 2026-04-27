@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Dance Room — VoidWall</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+
+    #video {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    #canvas {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 2;
+    }
+
+    #ui {
+      position: fixed; inset: 0; z-index: 10;
+      pointer-events: none;
+    }
+
+    #back {
+      position: absolute; top: 18px; left: 18px;
+      pointer-events: all;
+      color: rgba(255,255,255,0.55);
+      font-size: 11px; letter-spacing: 0.08em;
+      text-decoration: none;
+      background: rgba(0,0,0,0.45);
+      padding: 7px 14px; border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(6px);
+      transition: color 0.2s, background 0.2s;
+    }
+    #back:hover { color: #fff; background: rgba(0,0,0,0.65); }
+
+    #label {
+      position: absolute; top: 22px; right: 18px;
+      font-size: 10px; letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.2);
+    }
+
+    #status {
+      position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
+      font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <a id="back" href="../vr/">← назад</a>
+  <span id="label">Dance Room</span>
+  <div id="status">Загрузка...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script>
+  const video    = document.getElementById('video');
+  const canvas   = document.getElementById('canvas');
+  const ctx      = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Соединения скелета по цветовым группам
+  const SEGMENTS = [
+    { color: '#ffffff', pairs: [[11,12],[11,23],[12,24],[23,24]] },
+    { color: '#ff2d55', pairs: [[11,13],[13,15],[12,14],[14,16]] },
+    { color: '#30d5c8', pairs: [[23,25],[25,27],[24,26],[26,28]] },
+    { color: '#ff9f0a', pairs: [[15,17],[15,19],[17,19],[16,18],[16,20],[18,20]] },
+    { color: '#32d74b', pairs: [[27,29],[29,31],[27,31],[28,30],[30,32],[28,32]] },
+  ];
+
+  const BIG_JOINTS = new Set([11, 12, 15, 16, 23, 24, 27, 28]);
+
+  function onResults(results) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!results.poseLandmarks) return;
+
+    const lms = results.poseLandmarks;
+    const W = canvas.width, H = canvas.height;
+
+    // Зеркалируем X (фронтальная камера)
+    function pt(i) {
+      return {
+        x: (1 - lms[i].x) * W,
+        y: lms[i].y * H,
+        v: lms[i].visibility ?? 1,
+      };
+    }
+
+    ctx.lineCap = 'round';
+
+    // Линии скелета
+    SEGMENTS.forEach(({ color, pairs }) => {
+      pairs.forEach(([a, b]) => {
+        const pa = pt(a), pb = pt(b);
+        if (pa.v < 0.35 || pb.v < 0.35) return;
+
+        ctx.save();
+        ctx.globalAlpha = Math.min(pa.v, pb.v);
+        ctx.shadowBlur   = 18;
+        ctx.shadowColor  = color;
+        ctx.strokeStyle  = color;
+        ctx.lineWidth    = 3;
+        ctx.beginPath();
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+        ctx.stroke();
+        ctx.restore();
+      });
+    });
+
+    // Точки суставов (без точек лица 0–10)
+    for (let i = 11; i < lms.length; i++) {
+      const p = pt(i);
+      if (p.v < 0.35) continue;
+      const r = BIG_JOINTS.has(i) ? 6 : 4;
+
+      ctx.save();
+      ctx.globalAlpha  = p.v;
+      ctx.shadowBlur   = 22;
+      ctx.shadowColor  = '#fff';
+      ctx.fillStyle    = '#fff';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  const pose = new Pose({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`
+  });
+  pose.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    enableSegmentation: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+  pose.onResults(onResults);
+
+  let busy = false;
+  function loop() {
+    if (!busy && video.readyState >= 2) {
+      busy = true;
+      pose.send({ image: video }).finally(() => { busy = false; });
+    }
+    requestAnimationFrame(loop);
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+  }).then(stream => {
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      video.play();
+      statusEl.textContent = '';
+      loop();
+    };
+  }).catch(() => {
+    statusEl.textContent = 'Нет доступа к камере';
+  });
+</script>
+</body>
+</html>

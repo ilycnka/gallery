@@ -269,7 +269,7 @@
         <div class="task-head"><span>Сведения</span><span class="task-head-arrow">▲</span></div>
         <div class="task-body">
           <div class="task-info" id="detailInfo">
-            <b>VR интерфейсы</b>Системная папка<br><br>Объектов: 2
+            <b>VR интерфейсы</b>Системная папка<br><br>Объектов: 3
           </div>
         </div>
       </div>
@@ -309,11 +309,27 @@
         <span class="folder-label">Солнечная система</span>
       </a>
 
+      <a href="../dance/" class="folder" data-name="Dance Room" data-info="Файл • камера + тело">
+        <svg class="folder-svg" viewBox="0 0 48 40" fill="none">
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="#f0c040"/>
+          <rect x="0" y="10" width="48" height="28" rx="2" fill="url(#fgc)"/>
+          <path d="M0 14 Q0 10 4 10 L16 10 L19 6 L44 6 Q48 6 48 10 L48 10 L0 10 Z" fill="#f8d860"/>
+          <rect x="1" y="11" width="46" height="26" rx="1.5" fill="none" stroke="#d09820" stroke-width="0.5" opacity="0.5"/>
+          <defs>
+            <linearGradient id="fgc" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#000" stop-opacity="0.08"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="folder-label">Dance Room</span>
+      </a>
+
     </div>
   </div>
 
   <div class="statusbar">
-    <div class="status-panel" id="statusLeft">2 объекта</div>
+    <div class="status-panel" id="statusLeft">3 объекта</div>
     <div class="status-panel" id="statusRight" style="border-right:none"></div>
   </div>
 </div>
@@ -364,9 +380,9 @@
   document.getElementById('fileArea').addEventListener('click', e => {
     if (e.target === e.currentTarget) {
       folders.forEach(x => x.classList.remove('selected'));
-      statusLeft.textContent  = '2 объекта';
+      statusLeft.textContent  = '3 объекта';
       statusRight.textContent = '';
-      detailInfo.innerHTML    = '<b>VR интерфейсы</b>Системная папка<br><br>Объектов: 2';
+      detailInfo.innerHTML    = '<b>VR интерфейсы</b>Системная папка<br><br>Объектов: 3';
     }
   });
 
