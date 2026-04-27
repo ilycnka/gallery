@@ -89,31 +89,29 @@
   // ── Частицы ──────────────────────────────────────────────────
   let particles = [];
 
-  // Взрыв частиц из точки wx,wy в направлении dirX,dirY
-  function spawnBurst(wx, wy, dirX, dirY) {
+  // Взрыв частиц по всему экрану в направлении dirX,dirY
+  function spawnBurst(dirX, dirY) {
     const W = canvas.width, H = canvas.height;
-    const N = 1100;
-    const baseSpeed = W * 0.026;
+    const N = 4500;
+    const baseSpeed = W * 0.028;
     const baseHue   = Math.random() * 360;
 
     for (let i = 0; i < N; i++) {
-      // Разброс перпендикулярно — по всему экрану
-      const perpX  = -dirY, perpY = dirX;
-      const spread = (Math.random() - 0.5) * Math.hypot(W, H) * 2.2;
-      const sx = wx + perpX * spread + (Math.random() - 0.5) * W * 0.15;
-      const sy = wy + perpY * spread + (Math.random() - 0.5) * H * 0.15;
+      // Равномерный спавн по всему экрану
+      const sx = Math.random() * W;
+      const sy = Math.random() * H;
 
-      const a = Math.atan2(dirY, dirX) + (Math.random() - 0.5) * 0.45;
-      const v = baseSpeed * (0.5 + Math.random() * 1.1);
+      const a = Math.atan2(dirY, dirX) + (Math.random() - 0.5) * 0.35;
+      const v = baseSpeed * (0.5 + Math.random() * 1.2);
 
       particles.push({
         x: sx, y: sy,
         vx: Math.cos(a) * v,
         vy: Math.sin(a) * v,
-        life: 0.65 + Math.random() * 0.35,
-        decay: 0.009 + Math.random() * 0.016,
-        r: 1.5 + Math.random() * 3.5,
-        hue: (baseHue + Math.random() * 80) % 360,
+        life: 0.7 + Math.random() * 0.3,
+        decay: 0.012 + Math.random() * 0.018,
+        r: 2 + Math.random() * 3,
+        hue: (baseHue + Math.random() * 120) % 360,
       });
     }
   }
@@ -129,17 +127,21 @@
   }
 
   function drawParticles() {
+    ctx.lineCap = 'round';
     particles.forEach(p => {
       if (p.life <= 0) return;
-      const col = `hsl(${p.hue}, 100%, 65%)`;
+      const col = `hsl(${p.hue}, 100%, 68%)`;
       ctx.save();
       ctx.globalAlpha = p.life;
-      ctx.shadowBlur  = 10;
+      ctx.shadowBlur  = 14;
       ctx.shadowColor = col;
-      ctx.fillStyle   = col;
+      ctx.strokeStyle = col;
+      ctx.lineWidth   = p.r;
+      // Трек — линия назад по вектору скорости (длина ~3 кадра)
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(p.x - p.vx * 3, p.y - p.vy * 3);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
       ctx.restore();
     });
   }
@@ -177,7 +179,7 @@
       const isExtended = Math.abs(fDx) > shW * 0.55 && fLen > shW * 0.4;
 
       if (elbowAtBody && isExtended && !state.wasExtended && state.cooldown <= 0) {
-        spawnBurst(px(wr), py(wr), fDx / fLen, fDy / fLen);
+        spawnBurst(fDx / fLen, fDy / fLen);
         state.cooldown = 0.85;
       }
       state.wasExtended = isExtended;
