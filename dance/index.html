@@ -86,6 +86,104 @@
   let hue       = 0;   // вращающийся оттенок радуги
   let lastTime  = performance.now();
 
+  // ── Частицы ──────────────────────────────────────────────────
+  let particles = [];
+
+  // Взрыв частиц из точки wx,wy в направлении dirX,dirY
+  function spawnBurst(wx, wy, dirX, dirY) {
+    const W = canvas.width, H = canvas.height;
+    const N = 220;
+    const baseSpeed = W * 0.026;
+    const baseHue   = Math.random() * 360;
+
+    for (let i = 0; i < N; i++) {
+      // Разброс перпендикулярно направлению — полоса через весь экран
+      const perpX  = -dirY, perpY = dirX;
+      const spread = (Math.random() - 0.5) * H * 0.9;
+      const sx = wx + perpX * spread + (Math.random() - 0.5) * W * 0.04;
+      const sy = wy + perpY * spread + (Math.random() - 0.5) * H * 0.04;
+
+      const a = Math.atan2(dirY, dirX) + (Math.random() - 0.5) * 0.45;
+      const v = baseSpeed * (0.5 + Math.random() * 1.1);
+
+      particles.push({
+        x: sx, y: sy,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        life: 0.65 + Math.random() * 0.35,
+        decay: 0.009 + Math.random() * 0.016,
+        r: 1.5 + Math.random() * 3.5,
+        hue: (baseHue + Math.random() * 80) % 360,
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => {
+      p.x   += p.vx;
+      p.y   += p.vy;
+      p.vy  += 0.18;        // слабая гравитация
+      p.life -= p.decay;
+    });
+  }
+
+  function drawParticles() {
+    particles.forEach(p => {
+      if (p.life <= 0) return;
+      const col = `hsl(${p.hue}, 100%, 65%)`;
+      ctx.save();
+      ctx.globalAlpha = p.life;
+      ctx.shadowBlur  = 10;
+      ctx.shadowColor = col;
+      ctx.fillStyle   = col;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  // Состояние жеста для каждой руки [левая, правая]
+  // Индексы: shoulder, elbow, wrist
+  const ARM_IDX  = [[11,13,15],[12,14,16]];
+  const armState = [
+    { wasExtended: false, cooldown: 0 },
+    { wasExtended: false, cooldown: 0 },
+  ];
+
+  function checkGestures(lms, dt) {
+    if (!lms) return;
+    const W = canvas.width, H = canvas.height;
+    const px = i => (1 - lms[i].x) * W;
+    const py = i => lms[i].y * H;
+    const shW = Math.abs(px(11) - px(12)) || 1;  // ширина плеч
+
+    ARM_IDX.forEach(([sh, el, wr], idx) => {
+      const state = armState[idx];
+      state.cooldown = Math.max(0, state.cooldown - dt);
+
+      if ((lms[sh].visibility ?? 0) < 0.4 ||
+          (lms[el].visibility ?? 0) < 0.4 ||
+          (lms[wr].visibility ?? 0) < 0.4) return;
+
+      // Локоть у тела: горизонтальное расстояние локоть–плечо мало
+      const elbowAtBody = Math.abs(px(el) - px(sh)) < shW * 0.55;
+
+      // Предплечье вытянуто горизонтально в сторону
+      const fDx = px(wr) - px(el);
+      const fDy = py(wr) - py(el);
+      const fLen = Math.hypot(fDx, fDy) || 1;
+      const isExtended = Math.abs(fDx) > shW * 0.55 && fLen > shW * 0.4;
+
+      if (elbowAtBody && isExtended && !state.wasExtended && state.cooldown <= 0) {
+        spawnBurst(px(wr), py(wr), fDx / fLen, fDy / fLen);
+        state.cooldown = 0.85;
+      }
+      state.wasExtended = isExtended;
+    });
+  }
+
   // Скелет: соединения по цветовым группам
   const SEGMENTS = [
     { color: '#ffffff', pairs: [[11,12],[11,23],[12,24],[23,24]] },
@@ -207,16 +305,18 @@
     const now = performance.now();
     const dt  = Math.min((now - lastTime) / 1000, 0.1);
     lastTime  = now;
-    hue      += dt * 90;  // радуга вращается
+    hue      += dt * 90;
 
     const lms = results.poseLandmarks;
 
-    // Обе руки выше носа → эффект включается
     const handsUp = lms &&
       lms[15].visibility > 0.5 && lms[15].y < lms[0].y &&
       lms[16].visibility > 0.5 && lms[16].y < lms[0].y;
 
     intensity += ((handsUp ? 1 : 0) - intensity) * Math.min(dt * 4.5, 1);
+
+    checkGestures(lms, dt);
+    updateParticles(dt);
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -225,6 +325,7 @@
       cutoutBody(results.segmentationMask);
     }
 
+    drawParticles();
     if (lms) drawSkeleton(lms);
   }
 
