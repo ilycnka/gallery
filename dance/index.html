@@ -81,7 +81,12 @@
   resize();
   window.addEventListener('resize', resize);
 
-  // Соединения скелета по цветовым группам
+  // Состояние эффекта
+  let intensity = 0;   // 0..1 плавный переход
+  let hue       = 0;   // вращающийся оттенок радуги
+  let lastTime  = performance.now();
+
+  // Скелет: соединения по цветовым группам
   const SEGMENTS = [
     { color: '#ffffff', pairs: [[11,12],[11,23],[12,24],[23,24]] },
     { color: '#ff2d55', pairs: [[11,13],[13,15],[12,14],[14,16]] },
@@ -89,65 +94,171 @@
     { color: '#ff9f0a', pairs: [[15,17],[15,19],[17,19],[16,18],[16,20],[18,20]] },
     { color: '#32d74b', pairs: [[27,29],[29,31],[27,31],[28,30],[30,32],[28,32]] },
   ];
+  const BIG_JOINTS = new Set([11,12,15,16,23,24,27,28]);
 
-  const BIG_JOINTS = new Set([11, 12, 15, 16, 23, 24, 27, 28]);
-
-  function onResults(results) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!results.poseLandmarks) return;
-
-    const lms = results.poseLandmarks;
+  // ── Радужные лучи из-за тела ────────────────────────────────
+  function drawRainbow(lms, t) {
     const W = canvas.width, H = canvas.height;
 
-    // Зеркалируем X (фронтальная камера)
-    function pt(i) {
-      return {
-        x: (1 - lms[i].x) * W,
-        y: lms[i].y * H,
-        v: lms[i].visibility ?? 1,
-      };
+    // Центр-источник — между бёдрами (откуда расходятся лучи)
+    const cx = (1 - (lms[23].x + lms[24].x) / 2) * W;
+    const cy = ((lms[23].y + lms[24].y) / 2) * H;
+
+    // 1. Фоновое радужное сияние заливает всё пространство
+    const glow = ctx.createRadialGradient(cx, H * 0.05, 0, cx, H * 0.05, W * 1.2);
+    for (let i = 0; i <= 6; i++) {
+      const h = (hue + i * 60) % 360;
+      glow.addColorStop(i / 6, `hsla(${h}, 100%, 62%, ${i === 6 ? 0 : 0.52 * t})`);
+    }
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. Лучи — 36 треугольных пучков, веер вверх из-за тела
+    const NUM  = 36;
+    const LEN  = Math.hypot(W, H) * 1.5;
+    const A0   = -Math.PI * 0.95;   // ~-171° (почти влево)
+    const A1   = -Math.PI * 0.05;   // ~-9°   (почти вправо)
+
+    for (let i = 0; i < NUM; i++) {
+      const angle = A0 + (i / (NUM - 1)) * (A1 - A0);
+      const h     = (hue + i * (360 / NUM)) % 360;
+      const halfW = LEN * 0.065;
+
+      const ex = cx + Math.cos(angle) * LEN;
+      const ey = cy + Math.sin(angle) * LEN;
+
+      const g = ctx.createLinearGradient(cx, cy, ex, ey);
+      g.addColorStop(0,   `hsla(${h}, 100%, 88%, ${0.78 * t})`);
+      g.addColorStop(0.18,`hsla(${h}, 100%, 68%, ${0.45 * t})`);
+      g.addColorStop(1,   `hsla(${h}, 100%, 55%, 0)`);
+
+      const px = Math.cos(angle + Math.PI / 2);
+      const py = Math.sin(angle + Math.PI / 2);
+
+      ctx.save();
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex + px * halfW, ey + py * halfW);
+      ctx.lineTo(ex - px * halfW, ey - py * halfW);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
     }
 
-    ctx.lineCap = 'round';
+    // 3. Яркая вспышка в эпицентре (за телом)
+    const flash = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.35);
+    flash.addColorStop(0,   `hsla(${hue % 360}, 80%, 98%, ${0.65 * t})`);
+    flash.addColorStop(0.35,`hsla(${hue % 360}, 100%, 75%, ${0.3 * t})`);
+    flash.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = flash;
+    ctx.fillRect(0, 0, W, H);
+  }
 
-    // Линии скелета
+  // ── Тёмный силуэт тела (лучи "из-за" него) ─────────────────
+  function drawSilhouette(lms, t) {
+    if (t < 0.02) return;
+    const W = canvas.width, H = canvas.height;
+
+    const noseX = (1 - lms[0].x) * W,  noseY = lms[0].y * H;
+    const shLX  = (1 - lms[11].x) * W, shRX  = (1 - lms[12].x) * W;
+    const shY   = (lms[11].y + lms[12].y) / 2 * H;
+    const hipY  = (lms[23].y + lms[24].y) / 2 * H;
+    const cx    = (shLX + shRX) / 2;
+    const sw    = Math.abs(shRX - shLX);   // ширина плеч
+
+    // Голова — тёмный круг с мягким краем
+    const headR = sw * 0.44;
+    const hg = ctx.createRadialGradient(noseX, noseY, 0, noseX, noseY, headR * 1.6);
+    hg.addColorStop(0,   `rgba(0,0,0,${0.93 * t})`);
+    hg.addColorStop(0.55,`rgba(0,0,0,${0.65 * t})`);
+    hg.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.fillStyle = hg;
+    ctx.beginPath();
+    ctx.arc(noseX, noseY, headR * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Тело — вертикальный мягкий эллипс
+    const bodyH  = (hipY - shY) + headR * 2.2;
+    const bodyCY = shY + (hipY - shY) * 0.42;
+    const bodyRx = sw * 0.68;
+    const bodyRy = Math.max(bodyH * 0.54, bodyRx);
+
+    const bg = ctx.createRadialGradient(cx, bodyCY, 0, cx, bodyCY, Math.max(bodyRx, bodyRy) * 1.15);
+    bg.addColorStop(0,    `rgba(0,0,0,${0.93 * t})`);
+    bg.addColorStop(0.5,  `rgba(0,0,0,${0.62 * t})`);
+    bg.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.save();
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.ellipse(cx, bodyCY, bodyRx, bodyRy, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Скелет ───────────────────────────────────────────────────
+  function drawSkeleton(lms) {
+    const W = canvas.width, H = canvas.height;
+    function pt(i) {
+      return { x: (1 - lms[i].x) * W, y: lms[i].y * H, v: lms[i].visibility ?? 1 };
+    }
+    ctx.lineCap = 'round';
     SEGMENTS.forEach(({ color, pairs }) => {
       pairs.forEach(([a, b]) => {
         const pa = pt(a), pb = pt(b);
         if (pa.v < 0.35 || pb.v < 0.35) return;
-
         ctx.save();
         ctx.globalAlpha = Math.min(pa.v, pb.v);
-        ctx.shadowBlur   = 18;
-        ctx.shadowColor  = color;
-        ctx.strokeStyle  = color;
-        ctx.lineWidth    = 3;
-        ctx.beginPath();
-        ctx.moveTo(pa.x, pa.y);
-        ctx.lineTo(pb.x, pb.y);
+        ctx.shadowBlur  = 18; ctx.shadowColor = color;
+        ctx.strokeStyle = color; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y);
         ctx.stroke();
         ctx.restore();
       });
     });
-
-    // Точки суставов (без точек лица 0–10)
     for (let i = 11; i < lms.length; i++) {
       const p = pt(i);
       if (p.v < 0.35) continue;
-      const r = BIG_JOINTS.has(i) ? 6 : 4;
-
       ctx.save();
-      ctx.globalAlpha  = p.v;
-      ctx.shadowBlur   = 22;
-      ctx.shadowColor  = '#fff';
-      ctx.fillStyle    = '#fff';
+      ctx.globalAlpha = p.v;
+      ctx.shadowBlur  = 22; ctx.shadowColor = '#fff';
+      ctx.fillStyle   = '#fff';
       ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, BIG_JOINTS.has(i) ? 6 : 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
   }
 
+  // ── Главный обработчик ────────────────────────────────────────
+  function onResults(results) {
+    const now = performance.now();
+    const dt  = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime  = now;
+    hue      += dt * 90;  // радуга вращается
+
+    const lms = results.poseLandmarks;
+
+    // Обе руки выше носа → эффект включается
+    const handsUp = lms &&
+      lms[15].visibility > 0.5 && lms[15].y < lms[0].y &&
+      lms[16].visibility > 0.5 && lms[16].y < lms[0].y;
+
+    intensity += ((handsUp ? 1 : 0) - intensity) * Math.min(dt * 4.5, 1);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (intensity > 0.01 && lms) {
+      drawRainbow(lms, intensity);
+      drawSilhouette(lms, intensity);
+    }
+
+    if (lms) drawSkeleton(lms);
+  }
+
+  // ── MediaPipe Pose ────────────────────────────────────────────
   const pose = new Pose({
     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`
   });
