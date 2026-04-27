@@ -92,16 +92,16 @@
   // Взрыв частиц из точки wx,wy в направлении dirX,dirY
   function spawnBurst(wx, wy, dirX, dirY) {
     const W = canvas.width, H = canvas.height;
-    const N = 220;
+    const N = 1100;
     const baseSpeed = W * 0.026;
     const baseHue   = Math.random() * 360;
 
     for (let i = 0; i < N; i++) {
-      // Разброс перпендикулярно направлению — полоса через весь экран
+      // Разброс перпендикулярно — по всему экрану
       const perpX  = -dirY, perpY = dirX;
-      const spread = (Math.random() - 0.5) * H * 0.9;
-      const sx = wx + perpX * spread + (Math.random() - 0.5) * W * 0.04;
-      const sy = wy + perpY * spread + (Math.random() - 0.5) * H * 0.04;
+      const spread = (Math.random() - 0.5) * Math.hypot(W, H) * 2.2;
+      const sx = wx + perpX * spread + (Math.random() - 0.5) * W * 0.15;
+      const sy = wy + perpY * spread + (Math.random() - 0.5) * H * 0.15;
 
       const a = Math.atan2(dirY, dirX) + (Math.random() - 0.5) * 0.45;
       const v = baseSpeed * (0.5 + Math.random() * 1.1);
