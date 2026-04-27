@@ -680,9 +680,7 @@
   }
 
   // ── MediaPipe Pose ────────────────────────────────────────────
-  const pose = new Pose({
-    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}`
-  });
+  const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
   pose.setOptions({
     modelComplexity:        0,
     smoothLandmarks:        true,
@@ -694,10 +692,39 @@
   pose.onResults(onResults);
 
   let busy = false;
+  let errCount = 0;
+
+  async function initPose() {
+    const p = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+    p.setOptions({
+      modelComplexity:        0,
+      smoothLandmarks:        true,
+      enableSegmentation:     true,
+      smoothSegmentation:     true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence:  0.5,
+    });
+    p.onResults(onResults);
+    await p.initialize();
+    return p;
+  }
+
+  let activePose = pose;
+
   function loop() {
     if (!busy && video.readyState >= 2) {
       busy = true;
-      pose.send({ image: video }).finally(() => { busy = false; });
+      activePose.send({ image: video })
+        .then(() => { errCount = 0; })
+        .catch(() => {
+          errCount++;
+          // После 3 ошибок подряд — пересоздаём экземпляр MediaPipe
+          if (errCount >= 3) {
+            errCount = 0;
+            initPose().then(p => { activePose = p; }).catch(() => {});
+          }
+        })
+        .finally(() => { busy = false; });
     }
     requestAnimationFrame(loop);
   }
