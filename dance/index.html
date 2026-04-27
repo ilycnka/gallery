@@ -155,46 +155,16 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  // ── Тёмный силуэт тела (лучи "из-за" него) ─────────────────
-  function drawSilhouette(lms, t) {
-    if (t < 0.02) return;
+  // ── Вырезаем тело из радуги (segmentation mask) ────────────
+  function cutoutBody(mask) {
+    if (!mask) return;
     const W = canvas.width, H = canvas.height;
-
-    const noseX = (1 - lms[0].x) * W,  noseY = lms[0].y * H;
-    const shLX  = (1 - lms[11].x) * W, shRX  = (1 - lms[12].x) * W;
-    const shY   = (lms[11].y + lms[12].y) / 2 * H;
-    const hipY  = (lms[23].y + lms[24].y) / 2 * H;
-    const cx    = (shLX + shRX) / 2;
-    const sw    = Math.abs(shRX - shLX);   // ширина плеч
-
-    // Голова — тёмный круг с мягким краем
-    const headR = sw * 0.44;
-    const hg = ctx.createRadialGradient(noseX, noseY, 0, noseX, noseY, headR * 1.6);
-    hg.addColorStop(0,   `rgba(0,0,0,${0.93 * t})`);
-    hg.addColorStop(0.55,`rgba(0,0,0,${0.65 * t})`);
-    hg.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.save();
-    ctx.fillStyle = hg;
-    ctx.beginPath();
-    ctx.arc(noseX, noseY, headR * 1.6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Тело — вертикальный мягкий эллипс
-    const bodyH  = (hipY - shY) + headR * 2.2;
-    const bodyCY = shY + (hipY - shY) * 0.42;
-    const bodyRx = sw * 0.68;
-    const bodyRy = Math.max(bodyH * 0.54, bodyRx);
-
-    const bg = ctx.createRadialGradient(cx, bodyCY, 0, cx, bodyCY, Math.max(bodyRx, bodyRy) * 1.15);
-    bg.addColorStop(0,    `rgba(0,0,0,${0.93 * t})`);
-    bg.addColorStop(0.5,  `rgba(0,0,0,${0.62 * t})`);
-    bg.addColorStop(1,    'rgba(0,0,0,0)');
-    ctx.save();
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.ellipse(cx, bodyCY, bodyRx, bodyRy, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.globalCompositeOperation = 'destination-out';
+    // Зеркалируем маску — в sync с отражённым видео
+    ctx.translate(W, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(mask, 0, 0, W, H);
     ctx.restore();
   }
 
@@ -252,7 +222,7 @@
 
     if (intensity > 0.01 && lms) {
       drawRainbow(lms, intensity);
-      drawSilhouette(lms, intensity);
+      cutoutBody(results.segmentationMask);
     }
 
     if (lms) drawSkeleton(lms);
@@ -265,7 +235,8 @@
   pose.setOptions({
     modelComplexity: 1,
     smoothLandmarks: true,
-    enableSegmentation: false,
+    enableSegmentation: true,
+    smoothSegmentation: true,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5,
   });
