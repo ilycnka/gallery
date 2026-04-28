@@ -74,24 +74,6 @@
   function ly(lms, i) { return lms[i].y * canvas.height; }
   function lv(lms, i) { return lms[i].visibility ?? 0; }
 
-  // Плавное сглаживание поверх встроенного smoothLandmarks
-  let smoothed = null;
-  const ALPHA = 0.35; // меньше = плавнее, больше = отзывчивее
-
-  function applySmooting(lms) {
-    if (!smoothed || smoothed.length !== lms.length) {
-      smoothed = lms.map(l => ({ x: l.x, y: l.y, visibility: l.visibility ?? 0 }));
-      return smoothed;
-    }
-    for (let i = 0; i < lms.length; i++) {
-      const v = lms[i].visibility ?? 0;
-      smoothed[i].x          += (lms[i].x - smoothed[i].x) * ALPHA;
-      smoothed[i].y          += (lms[i].y - smoothed[i].y) * ALPHA;
-      smoothed[i].visibility += (v - smoothed[i].visibility) * ALPHA;
-    }
-    return smoothed;
-  }
-
   // Вычисляет виртуальную точку — макушку головы (выше носа)
   function crownPoint(lms) {
     const nose    = lms[0];
@@ -210,16 +192,14 @@
 
   function onResults(results) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const raw = results.poseLandmarks;
-    if (!raw) return;
-    const lms = applySmooting(raw);
-    drawSkeleton(lms);
+    const lms = results.poseLandmarks;
+    if (lms) drawSkeleton(lms);
   }
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
   pose.setOptions({
-    modelComplexity:        2,   // максимальная точность для полного роста издалека
-    smoothLandmarks:        true,
+    modelComplexity:        1,
+    smoothLandmarks:        false, // отключено для нулевой задержки
     enableSegmentation:     false,
     smoothSegmentation:     false,
     minDetectionConfidence: 0.4, // ниже порог = лучше ловит издалека
