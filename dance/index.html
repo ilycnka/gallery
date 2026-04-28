@@ -262,45 +262,77 @@
   }
 
   function spawnDiskParticles(ex, ey, displayR) {
-    const speed = diskAngVel;
-    // базовый поток частиц + бонус за скорость
-    const count = 3 + Math.floor(speed / 0.008);
+    const t = Math.min(diskAngVel / 0.09, 1); // 0→1
+    // количество резко растёт со скоростью
+    const count = Math.floor(1 + t * t * 22);
     for (let i = 0; i < count; i++) {
-      // спавним по всей площади диска, не только на краю
-      const frac   = 0.4 + Math.random() * 0.7; // 40–110% радиуса
-      const a      = Math.random() * Math.PI * 2;
-      const r      = displayR * frac;
-      const tang   = a + diskDir * Math.PI / 2;
-      const spd    = 0.8 + speed * 80 * frac + Math.random() * 1.5;
+      // на высокой скорости — плотнее к краю для видимых колец
+      const frac = t > 0.5
+        ? 0.55 + Math.random() * 0.55
+        : 0.3  + Math.random() * 0.8;
+      const a    = Math.random() * Math.PI * 2;
+      const r    = displayR * frac;
+      const tang = a + diskDir * Math.PI / 2;
+      // тангенциальная скорость доминирует; радиальная — минимальна
+      const tangSpd = diskAngVel * 380 * frac;
+      const radSpd  = diskAngVel *  25 * Math.random();
       diskParts.push({
         x: ex + Math.cos(a) * r,
         y: ey + Math.sin(a) * r,
-        vx: Math.cos(tang) * spd * 0.55 + Math.cos(a) * spd * 0.45,
-        vy: Math.sin(tang) * spd * 0.55 + Math.sin(a) * spd * 0.45,
+        vx: Math.cos(tang) * tangSpd + Math.cos(a) * radSpd,
+        vy: Math.sin(tang) * tangSpd + Math.sin(a) * radSpd,
         life: 1,
-        maxLife: 50 + Math.random() * 60,
-        r: 1.8 + Math.random() * 3,
-        hue: 180 + Math.random() * 70,
+        // на высокой скорости частицы живут дольше → длиннее шлейф
+        maxLife: 18 + t * 90,
+        r: 1 + t * 2.5,
+        hue: 185 + Math.random() * 55,
+        t, // уровень скорости в момент спавна
       });
     }
   }
 
   function updateDiskParticles() {
     ctx.save();
+    ctx.lineCap = 'round';
     for (let i = diskParts.length - 1; i >= 0; i--) {
       const p = diskParts[i];
       p.x  += p.vx; p.y += p.vy;
-      p.vx *= 0.93; p.vy *= 0.93;
+      p.vx *= 0.91; p.vy *= 0.91;
       p.life -= 1 / p.maxLife;
       if (p.life <= 0) { diskParts.splice(i, 1); continue; }
-      const alpha = p.life * p.life;
-      ctx.globalAlpha = alpha * 0.85;
-      ctx.shadowBlur  = 10;
-      ctx.shadowColor = `hsl(${p.hue},100%,72%)`;
-      ctx.fillStyle   = `hsl(${p.hue},100%,${72 + (1 - p.life) * 18}%)`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * (0.5 + p.life * 0.5), 0, Math.PI * 2);
-      ctx.fill();
+
+      const alpha = p.life * p.life * (0.4 + p.t * 0.6);
+      const spd   = Math.hypot(p.vx, p.vy);
+      const trailLen = spd * 3.5 * p.life;
+
+      if (trailLen > 2) {
+        // рисуем как светящийся шлейф в направлении движения
+        const ang = Math.atan2(p.vy, p.vx);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(ang);
+        const sg = ctx.createLinearGradient(-trailLen, 0, 1, 0);
+        sg.addColorStop(0,    `hsla(${p.hue},100%,75%,0)`);
+        sg.addColorStop(0.6,  `hsla(${p.hue},100%,82%,${alpha * 0.7})`);
+        sg.addColorStop(1,    `hsla(${p.hue},100%,95%,${alpha})`);
+        ctx.strokeStyle = sg;
+        ctx.lineWidth   = p.r * p.life + 0.5;
+        ctx.shadowColor = `hsl(${p.hue},100%,80%)`;
+        ctx.shadowBlur  = 6 + p.t * 14;
+        ctx.beginPath();
+        ctx.moveTo(-trailLen, 0);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.globalAlpha = alpha;
+        ctx.shadowBlur  = 8;
+        ctx.shadowColor = `hsl(${p.hue},100%,78%)`;
+        ctx.fillStyle   = `hsl(${p.hue},100%,82%)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * p.life + 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
   }
