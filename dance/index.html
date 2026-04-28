@@ -74,7 +74,52 @@
   function ly(lms, i) { return lms[i].y * canvas.height; }
   function lv(lms, i) { return lms[i].visibility ?? 0; }
 
+  // Плавное сглаживание поверх встроенного smoothLandmarks
+  let smoothed = null;
+  const ALPHA = 0.35; // меньше = плавнее, больше = отзывчивее
+
+  function applySmooting(lms) {
+    if (!smoothed || smoothed.length !== lms.length) {
+      smoothed = lms.map(l => ({ x: l.x, y: l.y, visibility: l.visibility ?? 0 }));
+      return smoothed;
+    }
+    for (let i = 0; i < lms.length; i++) {
+      const v = lms[i].visibility ?? 0;
+      smoothed[i].x          += (lms[i].x - smoothed[i].x) * ALPHA;
+      smoothed[i].y          += (lms[i].y - smoothed[i].y) * ALPHA;
+      smoothed[i].visibility += (v - smoothed[i].visibility) * ALPHA;
+    }
+    return smoothed;
+  }
+
+  // Вычисляет виртуальную точку — макушку головы (выше носа)
+  function crownPoint(lms) {
+    const nose    = lms[0];
+    // среднее по двум глазам для стабильности
+    const eyeY    = (lms[2].y + lms[5].y) * 0.5;
+    const eyeVis  = Math.min(lms[2].visibility ?? 0, lms[5].visibility ?? 0);
+    const noseToEye = nose.y - eyeY;            // >0 нос ниже глаз
+    return {
+      x:          nose.x,
+      y:          nose.y - noseToEye * 2.2,     // экстраполируем вверх
+      visibility: Math.min(nose.visibility ?? 0, eyeVis),
+    };
+  }
+
+  // Центр ладони: среднее запястья + указательного + мизинца
+  function palmPoint(lms, wrist, index, pinky) {
+    const vw = lms[wrist].visibility ?? 0;
+    const vi = lms[index].visibility ?? 0;
+    const vp = lms[pinky].visibility ?? 0;
+    const vis = Math.min(vw, Math.max(vi, vp));
+    // если пальцы не видны — смещаем от запястья в направлении index finger
+    const sx = (lms[wrist].x * 0.5 + lms[index].x * 0.35 + lms[pinky].x * 0.15);
+    const sy = (lms[wrist].y * 0.5 + lms[index].y * 0.35 + lms[pinky].y * 0.15);
+    return { x: sx, y: sy, visibility: vis };
+  }
+
   const SEGMENTS = [
+    { color: '#a78bfa', pairs: [[0,1],[1,2],[2,3],[3,7],[0,4],[4,5],[5,6],[6,8],[9,10]] },
     { color: '#ffffff', pairs: [[11,12],[11,23],[12,24],[23,24]] },
     { color: '#ff2d55', pairs: [[11,13],[13,15],[12,14],[14,16]] },
     { color: '#30d5c8', pairs: [[23,25],[25,27],[24,26],[26,28]] },
@@ -82,18 +127,44 @@
     { color: '#32d74b', pairs: [[27,29],[29,31],[27,31],[28,30],[30,32],[28,32]] },
   ];
   const BIG_JOINTS = new Set([11,12,15,16,23,24,27,28]);
+  const VIS_MIN = 0.25; // порог ниже которого не рисуем (снижен для дальних планов)
+
+  function drawMarker(x, y, r, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha  = alpha;
+    ctx.shadowBlur   = 18;
+    ctx.shadowColor  = color;
+    ctx.strokeStyle  = color;
+    ctx.lineWidth    = 2;
+    // внешнее кольцо
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    // внутренняя точка
+    ctx.fillStyle = '#fff';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   function drawSkeleton(lms) {
+    const crown     = crownPoint(lms);
+    const leftPalm  = palmPoint(lms, 15, 19, 17);
+    const rightPalm = palmPoint(lms, 16, 20, 18);
+
     ctx.save();
     ctx.lineCap   = 'round';
     ctx.lineWidth = 3;
+
     SEGMENTS.forEach(({ color, pairs }) => {
       ctx.strokeStyle = color;
       ctx.shadowColor = color;
       ctx.shadowBlur  = 10;
       pairs.forEach(([a, b]) => {
         const va = lv(lms, a), vb = lv(lms, b);
-        if (va < 0.35 || vb < 0.35) return;
+        if (va < VIS_MIN || vb < VIS_MIN) return;
         ctx.globalAlpha = Math.min(va, vb);
         ctx.beginPath();
         ctx.moveTo(lx(lms, a), ly(lms, a));
@@ -101,33 +172,58 @@
         ctx.stroke();
       });
     });
+
+    // Суставы
     ctx.fillStyle   = '#fff';
     ctx.shadowColor = '#fff';
     ctx.shadowBlur  = 12;
-    for (let i = 11; i < lms.length; i++) {
+    for (let i = 0; i < lms.length; i++) {
       const v = lv(lms, i);
-      if (v < 0.35) continue;
+      if (v < VIS_MIN) continue;
       ctx.globalAlpha = v;
       ctx.beginPath();
       ctx.arc(lx(lms, i), ly(lms, i), BIG_JOINTS.has(i) ? 5 : 3, 0, Math.PI * 2);
       ctx.fill();
     }
+
     ctx.restore();
+
+    // Макушка головы
+    if (crown.visibility > VIS_MIN) {
+      const cx = (1 - crown.x) * canvas.width;
+      const cy = crown.y * canvas.height;
+      drawMarker(cx, cy, 10, '#a78bfa', crown.visibility);
+    }
+
+    // Ладони
+    if (leftPalm.visibility > VIS_MIN) {
+      const px = (1 - leftPalm.x) * canvas.width;
+      const py = leftPalm.y * canvas.height;
+      drawMarker(px, py, 12, '#ff9f0a', leftPalm.visibility);
+    }
+    if (rightPalm.visibility > VIS_MIN) {
+      const px = (1 - rightPalm.x) * canvas.width;
+      const py = rightPalm.y * canvas.height;
+      drawMarker(px, py, 12, '#ff9f0a', rightPalm.visibility);
+    }
   }
 
   function onResults(results) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const lms = results.poseLandmarks;
-    if (lms) drawSkeleton(lms);
+    const raw = results.poseLandmarks;
+    if (!raw) return;
+    const lms = applySmooting(raw);
+    drawSkeleton(lms);
   }
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
   pose.setOptions({
-    modelComplexity:        1,
+    modelComplexity:        2,   // максимальная точность для полного роста издалека
     smoothLandmarks:        true,
     enableSegmentation:     false,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence:  0.5,
+    smoothSegmentation:     false,
+    minDetectionConfidence: 0.4, // ниже порог = лучше ловит издалека
+    minTrackingConfidence:  0.4,
   });
   pose.onResults(onResults);
 
