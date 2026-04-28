@@ -212,10 +212,111 @@
     }
   }
 
+  // ── Диск ──────────────────────────────────────────────────────────────────
+  let diskActive    = false;
+  let diskAngle     = 0;   // накопленный угол вращения
+  let lastArmAngle  = null; // угол предплесья в прошлом кадре
+
+  // Жест: правый локоть отведён в сторону (верхнее плечо ~горизонтально)
+  function elbowDiskGesture(lms) {
+    const vs = lv(lms, 12), ve = lv(lms, 14), vw = lv(lms, 16);
+    if (vs < 0.4 || ve < 0.4 || vw < 0.4) return null;
+
+    const sx = lx(lms, 12), sy = ly(lms, 12);
+    const ex = lx(lms, 14), ey = ly(lms, 14);
+
+    // плечо отведено в сторону: локоть правее плеча на экране
+    // и верхняя часть руки ~горизонтальна (dy < 0.4 * dx)
+    const dx = ex - sx;
+    const dy = Math.abs(ey - sy);
+    const shoulderW = Math.abs(lx(lms, 11) - lx(lms, 12));
+    if (dx < shoulderW * 0.7) return null;   // недостаточно в сторону
+    if (dy > dx * 0.55) return null;          // рука слишком поднята/опущена
+
+    return { ex, ey, wx: lx(lms, 16), wy: ly(lms, 16) };
+  }
+
+  function drawDisk(g) {
+    const { ex, ey, wx, wy } = g;
+    const radius = Math.hypot(wx - ex, wy - ey);
+    if (radius < 20) return;
+
+    // угол предплесья → накапливаем дельту
+    const armAngle = Math.atan2(wy - ey, wx - ex);
+    if (lastArmAngle !== null) {
+      let delta = armAngle - lastArmAngle;
+      if (delta >  Math.PI) delta -= 2 * Math.PI;
+      if (delta < -Math.PI) delta += 2 * Math.PI;
+      diskAngle += delta;
+    }
+    lastArmAngle = armAngle;
+
+    ctx.save();
+    ctx.translate(ex, ey);
+    ctx.rotate(diskAngle);
+
+    // заливка: радиальный градиент
+    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+    grad.addColorStop(0,   'rgba(80,200,255,0.45)');
+    grad.addColorStop(0.55,'rgba(60,140,255,0.25)');
+    grad.addColorStop(1,   'rgba(40, 80,255,0.0)');
+    ctx.globalAlpha = 1;
+    ctx.fillStyle   = grad;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // внешнее светящееся кольцо
+    ctx.shadowColor = '#50c8ff';
+    ctx.shadowBlur  = 20;
+    ctx.strokeStyle = 'rgba(120,210,255,0.85)';
+    ctx.lineWidth   = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // спицы (8 штук), одна — направление запястья
+    const SPOKES = 8;
+    for (let k = 0; k < SPOKES; k++) {
+      const a   = (k / SPOKES) * Math.PI * 2;
+      const hot = k === 0; // нулевая спица = текущее направление предплесья
+      ctx.globalAlpha = hot ? 0.9 : 0.2;
+      ctx.strokeStyle = hot ? '#fff' : 'rgba(120,210,255,0.6)';
+      ctx.lineWidth   = hot ? 2 : 1;
+      ctx.shadowBlur  = hot ? 12 : 0;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+      ctx.stroke();
+    }
+
+    // центральный хаб
+    ctx.globalAlpha = 1;
+    ctx.fillStyle   = '#fff';
+    ctx.shadowColor = '#50c8ff';
+    ctx.shadowBlur  = 14;
+    ctx.beginPath();
+    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
   function onResults(results) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const lms = results.poseLandmarks;
-    if (lms) drawSkeleton(smoothShoulders(lms));
+    if (!lms) return;
+
+    const g = elbowDiskGesture(lms);
+    if (g) {
+      diskActive = true;
+      drawDisk(g);
+    } else {
+      diskActive   = false;
+      lastArmAngle = null;
+    }
+
+    drawSkeleton(smoothShoulders(lms));
   }
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
