@@ -305,11 +305,14 @@
     ctx.restore();
   }
 
-  // Диск продолжает спин на каждом rAF-кадре независимо от позы
+  // Диск продолжает спин по инерции когда жест снят
   function tickDisk() {
-    if (diskAngVel < 0.0005) return;
-    diskAngle  += diskAngVel * diskDir;
-    diskAngVel *= 0.97; // инерция: медленно затухает без жеста
+    diskAngVel *= 0.96;
+    const t = Math.min(diskAngVel / 0.09, 1);
+    diskScale  += (1 + t * 2.6 - diskScale) * 0.05;
+    diskBright += (t - diskBright)           * 0.05;
+    if (diskAngVel < 0.0003) return;
+    diskAngle += diskAngVel * diskDir;
     const displayR = diskBaseR * diskScale;
     if (diskAngVel > 0.003 && diskBaseR > 0) {
       spawnDiskParticles(diskEx, diskEy, displayR);
@@ -318,69 +321,38 @@
   }
 
   function renderDiskShape(ex, ey, displayR) {
-    if (displayR < 10) return;
+    if (displayR < 10 || diskBright < 0.01) return;
     ctx.save();
-    ctx.translate(ex, ey);
-    ctx.rotate(diskAngle);
 
-    // слой 1: широкое мягкое свечение за пределами диска
-    const glow = ctx.createRadialGradient(0, 0, displayR * 0.1, 0, 0, displayR * 1.6);
-    glow.addColorStop(0,   `rgba(60,160,255,${0.12 + diskBright * 0.18})`);
-    glow.addColorStop(0.5, `rgba(40,100,255,${0.06 + diskBright * 0.10})`);
-    glow.addColorStop(1,   'rgba(20,60,255,0)');
+    // слой 1: далёкое рассеянное свечение — нет границ вообще
+    const outer = ctx.createRadialGradient(ex, ey, 0, ex, ey, displayR * 2.2);
+    outer.addColorStop(0,   `rgba(60,140,255,${diskBright * 0.22})`);
+    outer.addColorStop(0.4, `rgba(40,100,255,${diskBright * 0.10})`);
+    outer.addColorStop(1,   'rgba(20,60,255,0)');
     ctx.globalAlpha = 1;
-    ctx.fillStyle   = glow;
-    ctx.beginPath();
-    ctx.arc(0, 0, displayR * 1.6, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle   = outer;
+    ctx.fillRect(ex - displayR * 2.2, ey - displayR * 2.2, displayR * 4.4, displayR * 4.4);
 
-    // слой 2: основное тело диска — мягкий градиент, нет жёсткого края
-    const body = ctx.createRadialGradient(0, 0, 0, 0, 0, displayR);
-    body.addColorStop(0,    `rgba(120,220,255,${0.5 + diskBright * 0.4})`);
-    body.addColorStop(0.35, `rgba(80,180,255,${0.3 + diskBright * 0.3})`);
-    body.addColorStop(0.70, `rgba(50,120,255,${0.12 + diskBright * 0.18})`);
-    body.addColorStop(1,    'rgba(20,60,255,0)');
-    ctx.fillStyle = body;
-    ctx.beginPath();
-    ctx.arc(0, 0, displayR, 0, Math.PI * 2);
-    ctx.fill();
+    // слой 2: основное свечение — исчезает на 65% радиуса
+    const core = ctx.createRadialGradient(ex, ey, 0, ex, ey, displayR * 1.1);
+    core.addColorStop(0,    `rgba(150,225,255,${0.55 * diskBright})`);
+    core.addColorStop(0.30, `rgba(90,180,255,${0.35 * diskBright})`);
+    core.addColorStop(0.65, `rgba(50,120,255,${0.10 * diskBright})`);
+    core.addColorStop(1,    'rgba(20,60,255,0)');
+    ctx.fillStyle = core;
+    ctx.fillRect(ex - displayR * 1.1, ey - displayR * 1.1, displayR * 2.2, displayR * 2.2);
 
-    // слой 3: спицы — только прозрачные полосы (нет жёстких линий)
-    const SPOKES = 8;
-    for (let k = 0; k < SPOKES; k++) {
-      const a   = (k / SPOKES) * Math.PI * 2;
-      const hot = k === 0;
-      const spokeAlpha = hot
-        ? 0.55 + diskBright * 0.35
-        : 0.04 + diskBright * 0.08;
-      // рисуем как очень мягкий линейный градиент
-      const gx1 = Math.cos(a) * displayR, gy1 = Math.sin(a) * displayR;
-      const sg = ctx.createLinearGradient(0, 0, gx1, gy1);
-      sg.addColorStop(0,   `rgba(255,255,255,${spokeAlpha})`);
-      sg.addColorStop(0.6, `rgba(160,220,255,${spokeAlpha * 0.5})`);
-      sg.addColorStop(1,   'rgba(80,160,255,0)');
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = sg;
-      ctx.lineWidth   = hot ? 3 + diskBright * 3 : 1.5;
-      ctx.shadowBlur  = hot ? 14 + diskBright * 16 : 0;
-      ctx.shadowColor = '#50c8ff';
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(gx1, gy1);
-      ctx.stroke();
-    }
-
-    // хаб
-    ctx.globalAlpha = 1;
-    const hub = ctx.createRadialGradient(0, 0, 0, 0, 0, 10 + diskBright * 12);
-    hub.addColorStop(0,   `rgba(255,255,255,${0.9 + diskBright * 0.1})`);
-    hub.addColorStop(0.4, `rgba(160,230,255,0.7)`);
+    // хаб — яркая точка в центре
+    const hubR = 8 + diskBright * 14;
+    const hub  = ctx.createRadialGradient(ex, ey, 0, ex, ey, hubR);
+    hub.addColorStop(0,   `rgba(255,255,255,${0.95 * diskBright})`);
+    hub.addColorStop(0.3, `rgba(180,235,255,${0.6  * diskBright})`);
     hub.addColorStop(1,   'rgba(80,180,255,0)');
-    ctx.shadowColor = '#80dfff';
-    ctx.shadowBlur  = 20 + diskBright * 25;
+    ctx.shadowColor = '#90e0ff';
+    ctx.shadowBlur  = 18 + diskBright * 28;
     ctx.fillStyle   = hub;
     ctx.beginPath();
-    ctx.arc(0, 0, 10 + diskBright * 12, 0, Math.PI * 2);
+    ctx.arc(ex, ey, hubR, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
@@ -430,9 +402,7 @@
       drawDisk(g);
     } else {
       lastArmAngle = null;
-      diskScale  += (1        - diskScale) * 0.05;
-      diskBright += (0        - diskBright) * 0.05;
-      tickDisk(); // диск продолжает крутиться по инерции
+      tickDisk(); // диск плавно гасится по инерции
     }
 
     if (skeletonVisible) drawSkeleton(smoothShoulders(lms));
