@@ -63,153 +63,17 @@
   const ctx      = canvas.getContext('2d');
   const statusEl = document.getElementById('status');
 
-  // Offscreen canvas для наложения маски тела
-  const bodyCanvas = document.createElement('canvas');
-  const bodyCtx    = bodyCanvas.getContext('2d');
-
   function resize() {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
-    bodyCanvas.width  = canvas.width;
-    bodyCanvas.height = canvas.height;
   }
   resize();
   window.addEventListener('resize', resize);
 
-  let intensity   = 0;
-  let hue         = 0;
-  let lastTime    = performance.now();
-  let flash       = 0;
-  let strobeOn    = false;
-  let strobeT     = 0;
-  let strobeHue   = 0;
-  let strobeAlpha = 0;
-  let beamT       = 0;
-  let rgbHue      = 0;
-  let linesT      = 0;
-  let linesScroll = 0;
-  let vortexT     = 0;
-  let vortexPool  = [];
-  let cubeT       = 0;
-  let cubeRotX    = 0;
-  let cubeRotY    = 0;
-  let brushTrail    = [];
-  let particles     = [];
-  let bodyLightT    = 0;
-  let bodyStrobeT   = 0;
-  let bodyFlashHue  = 0;
-
-  // ── Вспомогательные ──────────────────────────────────────────
-  // Миррованные координаты лендмарков
   function lx(lms, i) { return (1 - lms[i].x) * canvas.width; }
   function ly(lms, i) { return lms[i].y * canvas.height; }
   function lv(lms, i) { return lms[i].visibility ?? 0; }
 
-  // ── Стробоскоп ───────────────────────────────────────────────
-  function updateStrobe(dt) {
-    if (!strobeOn) { strobeAlpha = Math.max(0, strobeAlpha - dt * 8); return; }
-    strobeT += dt;
-    const phase = (strobeT % 0.13) / 0.13;
-    strobeAlpha = phase < 0.35 ? (1 - phase / 0.35) * 0.88 : 0;
-    if (phase < 0.01) strobeHue = Math.random() * 360;
-  }
-
-  function drawStrobe() {
-    if (strobeAlpha < 0.01) return;
-    ctx.globalAlpha = strobeAlpha;
-    ctx.fillStyle   = `hsl(${strobeHue},100%,65%)`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-
-  // ── Вспышка ──────────────────────────────────────────────────
-  function drawFlash() {
-    if (flash <= 0) return;
-    ctx.globalAlpha = flash * 0.82;
-    ctx.fillStyle   = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-
-  // ── Взрыв частиц ─────────────────────────────────────────────
-  function spawnBurst(wx, wy, dirX, dirY) {
-    flash = 1;
-    const W = canvas.width, H = canvas.height;
-    const baseSpeed = W * 0.026;
-    const baseHue   = Math.random() * 360;
-    const perpX = -dirY, perpY = dirX;
-    for (let i = 0; i < 220; i++) {
-      const spread = (Math.random() - 0.5) * H * 0.9;
-      const a = Math.atan2(dirY, dirX) + (Math.random() - 0.5) * 0.45;
-      const v = baseSpeed * (0.5 + Math.random() * 1.1);
-      particles.push({
-        x:  wx + perpX * spread + (Math.random() - 0.5) * W * 0.04,
-        y:  wy + perpY * spread + (Math.random() - 0.5) * H * 0.04,
-        vx: Math.cos(a) * v, vy: Math.sin(a) * v,
-        life: 0.65 + Math.random() * 0.35,
-        decay: 0.009 + Math.random() * 0.016,
-        r: 1.5 + Math.random() * 3.5,
-        hue: (baseHue + Math.random() * 80) % 360,
-      });
-    }
-  }
-
-  function updateParticles(dt) {
-    let alive = 0;
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
-      if (p.life <= 0) continue;
-      p.x += p.vx; p.y += p.vy; p.vy += 0.18; p.life -= p.decay;
-      particles[alive++] = p;
-    }
-    particles.length = alive;
-  }
-
-  function drawParticles() {
-    if (!particles.length) return;
-    ctx.save();
-    ctx.shadowBlur = 0;
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
-      ctx.globalAlpha = p.life;
-      ctx.fillStyle   = `hsl(${p.hue | 0},100%,65%)`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // ── Жесты (взрыв частиц) ─────────────────────────────────────
-  const ARM_IDX  = [[11,13,15],[12,14,16]];
-  const armState = [
-    { wasExtended: false, cooldown: 0 },
-    { wasExtended: false, cooldown: 0 },
-  ];
-
-  function checkGestures(lms, dt) {
-    if (!lms) return;
-    const W = canvas.width, H = canvas.height;
-    const shW = Math.abs(lx(lms,11) - lx(lms,12)) || 1;
-
-    ARM_IDX.forEach(([sh, el, wr], idx) => {
-      const state = armState[idx];
-      state.cooldown = Math.max(0, state.cooldown - dt);
-      if (lv(lms,sh) < 0.4 || lv(lms,el) < 0.4 || lv(lms,wr) < 0.4) return;
-
-      const elbowAtBody = Math.abs(lx(lms,el) - lx(lms,sh)) < shW * 0.55;
-      const fDx = lx(lms,wr) - lx(lms,el);
-      const fDy = ly(lms,wr) - ly(lms,el);
-      const fLen = Math.hypot(fDx, fDy) || 1;
-      const isExtended = Math.abs(fDx) > shW * 0.55 && fLen > shW * 0.4;
-
-      if (elbowAtBody && isExtended && !state.wasExtended && state.cooldown <= 0) {
-        spawnBurst(lx(lms,wr), ly(lms,wr), fDx / fLen, fDy / fLen);
-        state.cooldown = 0.85;
-      }
-      state.wasExtended = isExtended;
-    });
-  }
-
-  // ── Скелет ───────────────────────────────────────────────────
   const SEGMENTS = [
     { color: '#ffffff', pairs: [[11,12],[11,23],[12,24],[23,24]] },
     { color: '#ff2d55', pairs: [[11,13],[13,15],[12,14],[14,16]] },
@@ -220,511 +84,58 @@
   const BIG_JOINTS = new Set([11,12,15,16,23,24,27,28]);
 
   function drawSkeleton(lms) {
-    const W = canvas.width, H = canvas.height;
     ctx.save();
     ctx.lineCap   = 'round';
     ctx.lineWidth = 3;
-    // Кости — shadow только один раз на группу
     SEGMENTS.forEach(({ color, pairs }) => {
       ctx.strokeStyle = color;
       ctx.shadowColor = color;
       ctx.shadowBlur  = 10;
       pairs.forEach(([a, b]) => {
-        const va = lv(lms,a), vb = lv(lms,b);
+        const va = lv(lms, a), vb = lv(lms, b);
         if (va < 0.35 || vb < 0.35) return;
         ctx.globalAlpha = Math.min(va, vb);
         ctx.beginPath();
-        ctx.moveTo(lx(lms,a), ly(lms,a));
-        ctx.lineTo(lx(lms,b), ly(lms,b));
+        ctx.moveTo(lx(lms, a), ly(lms, a));
+        ctx.lineTo(lx(lms, b), ly(lms, b));
         ctx.stroke();
       });
     });
-    // Суставы — shadow один раз
     ctx.fillStyle   = '#fff';
     ctx.shadowColor = '#fff';
     ctx.shadowBlur  = 12;
     for (let i = 11; i < lms.length; i++) {
-      const v = lv(lms,i);
+      const v = lv(lms, i);
       if (v < 0.35) continue;
       ctx.globalAlpha = v;
       ctx.beginPath();
-      ctx.arc(lx(lms,i), ly(lms,i), BIG_JOINTS.has(i) ? 5 : 3, 0, Math.PI * 2);
+      ctx.arc(lx(lms, i), ly(lms, i), BIG_JOINTS.has(i) ? 5 : 3, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
   }
 
-  // ── Радуга ───────────────────────────────────────────────────
-  function drawRainbow(lms, t) {
-    const W = canvas.width, H = canvas.height;
-    const cx = (lx(lms,23) + lx(lms,24)) / 2;
-    const cy = (ly(lms,23) + ly(lms,24)) / 2;
-
-    // Фоновое сияние
-    const glow = ctx.createRadialGradient(cx, H * 0.05, 0, cx, H * 0.05, W * 1.2);
-    for (let i = 0; i <= 6; i++) {
-      const h = (hue + i * 60) % 360;
-      glow.addColorStop(i / 6, `hsla(${h},100%,62%,${i === 6 ? 0 : 0.52 * t})`);
-    }
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, W, H);
-
-    // Лучи — 24 вместо 36 (экономия ~33% градиентов)
-    const NUM = 24;
-    const LEN = Math.hypot(W, H) * 1.5;
-    const A0  = -Math.PI * 0.95, A1 = -Math.PI * 0.05;
-    for (let i = 0; i < NUM; i++) {
-      const angle = A0 + (i / (NUM - 1)) * (A1 - A0);
-      const h     = (hue + i * (360 / NUM)) % 360;
-      const ex = cx + Math.cos(angle) * LEN;
-      const ey = cy + Math.sin(angle) * LEN;
-      const halfW = LEN * 0.07;
-      const g = ctx.createLinearGradient(cx, cy, ex, ey);
-      g.addColorStop(0,    `hsla(${h},100%,88%,${0.78 * t})`);
-      g.addColorStop(0.18, `hsla(${h},100%,68%,${0.45 * t})`);
-      g.addColorStop(1,    `hsla(${h},100%,55%,0)`);
-      const pxc = Math.cos(angle + Math.PI / 2);
-      const pyc = Math.sin(angle + Math.PI / 2);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(ex + pxc * halfW, ey + pyc * halfW);
-      ctx.lineTo(ex - pxc * halfW, ey - pyc * halfW);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Эпицентр
-    const fl = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.35);
-    fl.addColorStop(0,    `hsla(${hue % 360},80%,98%,${0.65 * t})`);
-    fl.addColorStop(0.35, `hsla(${hue % 360},100%,75%,${0.3 * t})`);
-    fl.addColorStop(1,    'rgba(0,0,0,0)');
-    ctx.fillStyle = fl;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // ── Маска тела ───────────────────────────────────────────────
-  function cutoutBody(mask) {
-    if (!mask) return;
-    const W = canvas.width, H = canvas.height;
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.translate(W, 0); ctx.scale(-1, 1);
-    ctx.drawImage(mask, 0, 0, W, H);
-    ctx.restore();
-  }
-
-  // ── Луч между ладонями ───────────────────────────────────────
-  function drawBeam(lms, t) {
-    const W = canvas.width, H = canvas.height;
-    const x1 = lx(lms,13) + (lx(lms,15) - lx(lms,13)) * 1.4;
-    const y1 = ly(lms,13) + (ly(lms,15) - ly(lms,13)) * 1.4;
-    const x2 = lx(lms,14) + (lx(lms,16) - lx(lms,14)) * 1.4;
-    const y2 = ly(lms,14) + (ly(lms,16) - ly(lms,14)) * 1.4;
-    const pulse = 0.85 + Math.sin(hue * 0.11) * 0.15;
-    const col   = `hsl(${hue % 360},100%,75%)`;
-
-    ctx.save();
-    ctx.lineCap = 'round';
-
-    ctx.globalAlpha = t * 0.35 * pulse;
-    ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 50; ctx.lineWidth = 80;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-
-    ctx.globalAlpha = t * 0.65 * pulse;
-    ctx.strokeStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 20; ctx.lineWidth = 28;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-
-    ctx.globalAlpha = t * pulse;
-    ctx.shadowBlur = 8; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-
-    ctx.restore();
-  }
-
-  // ── Кисть правой руки ────────────────────────────────────────
-  function updateBrushTrail(lms, now) {
-    const x = lx(lms,14) + (lx(lms,16) - lx(lms,14)) * 1.4;
-    const y = ly(lms,14) + (ly(lms,16) - ly(lms,14)) * 1.4;
-    brushTrail.push({ x, y, t: now, hue: hue % 360 });
-    const cutoff = now - 3000;
-    let i = 0;
-    while (i < brushTrail.length && brushTrail[i].t < cutoff) i++;
-    if (i > 0) brushTrail.splice(0, i);
-  }
-
-  function drawBrushTrail(now) {
-    if (brushTrail.length < 2) return;
-    ctx.save();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.shadowBlur = 8;
-    for (let i = 1; i < brushTrail.length; i++) {
-      const p0 = brushTrail[i - 1], p1 = brushTrail[i];
-      const age = (now - p1.t) / 3000;
-      const col = `hsl(${p1.hue | 0},100%,65%)`;
-      ctx.globalAlpha = (1 - age) * 0.92;
-      ctx.strokeStyle = col; ctx.shadowColor = col;
-      ctx.lineWidth = 10 * (1 - age * 0.6);
-      ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // ── 3D куб ───────────────────────────────────────────────────
-  const CUBE_V = [
-    [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
-    [-1,-1, 1],[1,-1, 1],[1,1, 1],[-1,1, 1],
-  ];
-  const CUBE_E = [
-    [0,1],[1,2],[2,3],[3,0],
-    [4,5],[5,6],[6,7],[7,4],
-    [0,4],[1,5],[2,6],[3,7],
-  ];
-
-  function drawCube(t, rotX, rotY) {
-    const W = canvas.width, H = canvas.height;
-    const cx = W / 2, cy = H / 2;
-    const scale = Math.min(W, H) * 1.6;
-    const camZ  = 3.0;
-    const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
-    const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
-
-    const pts = CUBE_V.map(([x, y, z]) => {
-      const x1 =  x * cosY + z * sinY;
-      const z1 = -x * sinY + z * cosY;
-      const y2 =  y * cosX - z1 * sinX;
-      const z2 =  y * sinX + z1 * cosX;
-      const d  = camZ + z2;
-      return { sx: cx + (x1 * scale) / d, sy: cy + (y2 * scale) / d, z: z2 };
-    });
-
-    ctx.save();
-    ctx.lineCap   = 'round';
-    ctx.shadowBlur = 18;
-
-    CUBE_E.forEach(([a, b], i) => {
-      const pa = pts[a], pb = pts[b];
-      const depth  = (pa.z + pb.z) / 2;
-      const bright = 0.45 + (depth + 1.5) / 3 * 0.55;
-      const h   = (hue + i * 30) % 360;
-      const col = `hsl(${h | 0},100%,${(bright * 80) | 0}%)`;
-      ctx.globalAlpha = t * bright;
-      ctx.strokeStyle = col; ctx.shadowColor = col;
-      ctx.lineWidth = 2.5 + bright * 2.5;
-      ctx.beginPath(); ctx.moveTo(pa.sx, pa.sy); ctx.lineTo(pb.sx, pb.sy); ctx.stroke();
-    });
-
-    // Вершины — shadow один раз
-    ctx.fillStyle = '#fff'; ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
-    ctx.globalAlpha = t * 0.9;
-    pts.forEach(p => {
-      ctx.beginPath(); ctx.arc(p.sx, p.sy, 3.5, 0, Math.PI * 2); ctx.fill();
-    });
-
-    ctx.restore();
-  }
-
-  // ── Вихрь частиц ─────────────────────────────────────────────
-  function spawnVortexParticles(cx, cy, dt) {
-    const W = canvas.width;
-    const count = Math.round(dt * 200);
-    for (let i = 0; i < count; i++) {
-      const h = Math.random() * 360;
-      vortexPool.push({
-        angle:  Math.random() * Math.PI * 2,
-        radius: W * (0.08 + Math.random() * 0.48),
-        drift:  (Math.random() - 0.5) * W * 0.018,
-        speed:  (1.8 + Math.random() * 3.5) * (Math.random() < 0.5 ? 1 : -1),
-        cx, cy,
-        life:   0.5 + Math.random() * 0.5,
-        decay:  0.006 + Math.random() * 0.012,
-        r:      1 + Math.random() * 4,
-        hue: h, sat: 80 + Math.random() * 20, lit: 55 + Math.random() * 30,
-      });
-    }
-  }
-
-  function updateVortex(dt) {
-    let alive = 0;
-    for (let i = 0; i < vortexPool.length; i++) {
-      const p = vortexPool[i];
-      if (p.life <= 0) continue;
-      p.angle  += p.speed * dt;
-      p.radius += p.drift * dt;
-      p.life   -= p.decay;
-      if (p.radius > 0) vortexPool[alive++] = p;
-    }
-    vortexPool.length = alive;
-  }
-
-  function drawVortex(t) {
-    if (!vortexPool.length) return;
-    ctx.save();
-    ctx.shadowBlur = 0;
-    for (let i = 0; i < vortexPool.length; i++) {
-      const p = vortexPool[i];
-      ctx.globalAlpha = p.life * t;
-      ctx.fillStyle   = `hsl(${p.hue | 0},${p.sat | 0}%,${p.lit | 0}%)`;
-      const x = p.cx + Math.cos(p.angle) * p.radius;
-      const y = p.cy + Math.sin(p.angle) * p.radius;
-      ctx.fillRect(x - p.r, y - p.r, p.r * 2, p.r * 2);
-    }
-    ctx.restore();
-  }
-
-  // ── Линии по осям локтей ─────────────────────────────────────
-  function drawElbowLines(lms, t) {
-    const W = canvas.width, H = canvas.height;
-    const ex1 = lx(lms,13), ey1 = ly(lms,13);
-    const ex2 = lx(lms,14), ey2 = ly(lms,14);
-    const axX = ex2 - ex1, axY = ey2 - ey1;
-    const axLen = Math.hypot(axX, axY) || 1;
-    const dirX = axX / axLen, dirY = axY / axLen;
-    const perpX = -dirY, perpY = dirX;
-    const LINES   = 40;
-    const diagLen = Math.hypot(W, H);
-    const spacing = diagLen / LINES;
-    const midX = (ex1 + ex2) / 2, midY = (ey1 + ey2) / 2;
-
-    ctx.save();
-    ctx.lineCap   = 'round';
-    ctx.shadowBlur = 8;
-
-    for (let i = 0; i < LINES * 2; i++) {
-      const offset = (i - LINES) * spacing + (linesScroll % spacing) - spacing;
-      const mx = midX + perpX * offset;
-      const my = midY + perpY * offset;
-      const seed  = Math.sin(i * 127.1) * 0.5 + 0.5;
-      const seed2 = Math.sin(i * 311.7) * 0.5 + 0.5;
-      const h   = (hue + i * (360 / LINES)) % 360;
-      const col = `hsl(${h | 0},100%,75%)`;
-      ctx.globalAlpha = t * (0.55 + seed * 0.45);
-      ctx.strokeStyle = col; ctx.shadowColor = col;
-      ctx.lineWidth = 0.8 + seed2 * 5.5;
-      ctx.beginPath();
-      ctx.moveTo(mx - dirX * diagLen, my - dirY * diagLen);
-      ctx.lineTo(mx + dirX * diagLen, my + dirY * diagLen);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // ── Свечение тела ────────────────────────────────────────────
-  function drawBodyLight(mask, t) {
-    if (!mask || t < 0.01) return;
-    const W = canvas.width, H = canvas.height;
-
-    // Строб: ~10 вспышек/сек
-    bodyStrobeT += 1 / 60;
-    const phase = (bodyStrobeT % 0.1) / 0.1;
-    const strobeA = phase < 0.45 ? (1 - phase / 0.45) : 0;
-    if (phase < 0.015) bodyFlashHue = Math.random() * 360;
-    if (strobeA < 0.01) return;
-
-    // Рисуем маску на offscreen canvas
-    bodyCtx.clearRect(0, 0, W, H);
-    bodyCtx.save();
-    bodyCtx.translate(W, 0); bodyCtx.scale(-1, 1);
-    bodyCtx.drawImage(mask, 0, 0, W, H);
-    bodyCtx.restore();
-
-    // Заливаем тело ярким цветом через source-in
-    bodyCtx.globalCompositeOperation = 'source-in';
-    bodyCtx.fillStyle = `hsl(${bodyFlashHue | 0},100%,92%)`;
-    bodyCtx.globalAlpha = 1;
-    bodyCtx.fillRect(0, 0, W, H);
-    bodyCtx.globalCompositeOperation = 'source-over';
-
-    // Накладываем на основной canvas
-    ctx.save();
-    ctx.globalAlpha = t * strobeA;
-    ctx.shadowBlur  = 40;
-    ctx.shadowColor = `hsl(${bodyFlashHue | 0},100%,80%)`;
-    ctx.drawImage(bodyCanvas, 0, 0);
-    ctx.restore();
-  }
-
-  // ── Главный обработчик ────────────────────────────────────────
   function onResults(results) {
-    const now = performance.now();
-    const dt  = Math.min((now - lastTime) / 1000, 0.1);
-    lastTime  = now;
-    hue      += dt * 90;
-
-    const lms = results.poseLandmarks;
-
-    // — Определение жестов —
-    const wristsUp = lms &&
-      lv(lms,15) > 0.5 && lms[15].y < lms[0].y &&
-      lv(lms,16) > 0.5 && lms[16].y < lms[0].y;
-
-    const handsUp = wristsUp && lms && (() => {
-      const shW = Math.abs(lx(lms,11) - lx(lms,12)) || 1;
-      return Math.abs(lx(lms,13) - lx(lms,11)) < shW * 0.9 && lms[13].y > lms[11].y - 0.05 &&
-             Math.abs(lx(lms,14) - lx(lms,12)) < shW * 0.9 && lms[14].y > lms[12].y - 0.05;
-    })();
-
-    const beamOn   = wristsUp && !handsUp;
-    const vortexOn = lms && lv(lms,16) > 0.5 && lms[16].y < lms[0].y &&
-                     !(lv(lms,15) > 0.5 && lms[15].y < lms[0].y);
-    const cubeOn   = lms && lv(lms,15) > 0.5 && lms[15].y < lms[0].y &&
-                     !(lv(lms,16) > 0.5 && lms[16].y < lms[0].y);
-    const brushOn  = lms && lv(lms,16) > 0.5 && lms[16].y < lms[0].y;
-
-    const linesOn = !!(lms && (() => {
-      const shW = Math.abs(lx(lms,11) - lx(lms,12)) || 1;
-      const lDx = lx(lms,15) - lx(lms,13), lDy = ly(lms,15) - ly(lms,13);
-      const lLen = Math.hypot(lDx, lDy) || 1;
-      const rDx = lx(lms,16) - lx(lms,14), rDy = ly(lms,16) - ly(lms,14);
-      const rLen = Math.hypot(rDx, rDy) || 1;
-      return lv(lms,15) > 0.4 && lv(lms,13) > 0.4 && lDx < -shW * 0.5 && Math.abs(lDy / lLen) < 0.5 &&
-             lv(lms,16) > 0.4 && lv(lms,14) > 0.4 && rDx >  shW * 0.5 && Math.abs(rDy / rLen) < 0.5;
-    })());
-
-    strobeOn = !!(lms && (() => {
-      const shW = Math.abs(lx(lms,11) - lx(lms,12)) || 1;
-      const lDx = lx(lms,15) - lx(lms,13), lDy = ly(lms,15) - ly(lms,13);
-      const lLen = Math.hypot(lDx, lDy) || 1;
-      const rDx = lx(lms,16) - lx(lms,14), rDy = ly(lms,16) - ly(lms,14);
-      const rLen = Math.hypot(rDx, rDy) || 1;
-      return lv(lms,15) > 0.4 && lv(lms,13) > 0.4 && lDx < -shW * 0.5 && Math.abs(lDy / lLen) < 0.5 &&
-             lv(lms,16) > 0.4 && lv(lms,14) > 0.4 && rDx >  shW * 0.5 && Math.abs(rDy / rLen) < 0.5;
-    })());
-
-    // — Обновление состояний —
-    intensity   += ((handsUp  ? 1 : 0) - intensity)  * Math.min(dt * 4.5, 1);
-    beamT       += ((beamOn   ? 1 : 0) - beamT)       * Math.min(dt * 5,   1);
-    linesT      += ((linesOn  ? 1 : 0) - linesT)      * Math.min(dt * 4,   1);
-    bodyLightT  += ((linesOn  ? 1 : 0) - bodyLightT)  * Math.min(dt * 5,   1);
-    linesScroll  = (linesScroll + dt * 120 * (linesT > 0.01 ? 1 : 0)) % 10000;
-    vortexT     += ((vortexOn ? 1 : 0) - vortexT)     * Math.min(dt * 3,   1);
-    cubeT       += ((cubeOn   ? 1 : 0) - cubeT)       * Math.min(dt * 4,   1);
-    flash        = Math.max(0, flash - dt * 4);
-    updateStrobe(dt);
-
-    if (cubeOn && lms) {
-      const palmX = lx(lms,13) + (lx(lms,15) - lx(lms,13)) * 1.4;
-      const palmY = ly(lms,13) + (ly(lms,15) - ly(lms,13)) * 1.4;
-      cubeRotX = ((palmY / canvas.height) - 0.5) * Math.PI * 2;
-      cubeRotY = ((palmX / canvas.width)  - 0.5) * Math.PI * 2;
-    }
-
-    if (vortexOn && lms) {
-      const cx = (lx(lms,11) + lx(lms,12)) / 2;
-      const cy = (ly(lms,11) + ly(lms,12) + ly(lms,23) + ly(lms,24)) / 4;
-      spawnVortexParticles(cx, cy, dt);
-    }
-    updateVortex(dt);
-
-    if (brushOn) updateBrushTrail(lms, now);
-    else if (brushTrail.length) {
-      const cutoff = now - 3000;
-      let i = 0;
-      while (i < brushTrail.length && brushTrail[i].t < cutoff) i++;
-      if (i > 0) brushTrail.splice(0, i);
-    }
-
-    // RGB по расстоянию между ладонями
-    if (beamT > 0.01 && lms) {
-      const palm1x = lx(lms,13) + (lx(lms,15) - lx(lms,13)) * 1.4;
-      const palm1y = ly(lms,13) + (ly(lms,15) - ly(lms,13)) * 1.4;
-      const palm2x = lx(lms,14) + (lx(lms,16) - lx(lms,14)) * 1.4;
-      const palm2y = ly(lms,14) + (ly(lms,16) - ly(lms,14)) * 1.4;
-      rgbHue = (Math.hypot(palm2x - palm1x, palm2y - palm1y) / canvas.width) * 360;
-      const r = rgbHue / 360;
-      video.style.filter = `hue-rotate(${rgbHue | 0}deg) saturate(${1 + r * 5}) brightness(${1 + r * 0.5})`;
-    } else {
-      video.style.filter = '';
-    }
-
-    checkGestures(lms, dt);
-    updateParticles(dt);
-
-    // — Отрисовка —
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur  = 0;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (intensity > 0.01 && lms) {
-      drawRainbow(lms, intensity);
-      cutoutBody(results.segmentationMask);
-    }
-
-    if (beamT > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      ctx.globalAlpha = beamT * 0.22;
-      const og = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      og.addColorStop(0,   `hsl(${rgbHue % 360},100%,50%)`);
-      og.addColorStop(0.5, `hsl(${(rgbHue + 120) % 360},100%,50%)`);
-      og.addColorStop(1,   `hsl(${(rgbHue + 240) % 360},100%,50%)`);
-      ctx.fillStyle = og;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.restore();
-    }
-
-    ctx.globalAlpha = 1;
-    drawBrushTrail(now);
-    if (cubeT   > 0.01)         drawCube(cubeT, cubeRotX, cubeRotY);
-    if (vortexT > 0.01)         drawVortex(vortexT);
-    if (linesT  > 0.01 && lms) drawElbowLines(lms, linesT);
-    if (bodyLightT > 0.01) drawBodyLight(results.segmentationMask, bodyLightT);
-    drawStrobe();
-    drawParticles();
+    const lms = results.poseLandmarks;
     if (lms) drawSkeleton(lms);
-    if (beamT > 0.01 && lms)   drawBeam(lms, beamT);
-    drawFlash();
-
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur  = 0;
   }
 
-  // ── MediaPipe Pose ────────────────────────────────────────────
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
   pose.setOptions({
-    modelComplexity:        0,
+    modelComplexity:        1,
     smoothLandmarks:        true,
-    enableSegmentation:     true,
-    smoothSegmentation:     true,
+    enableSegmentation:     false,
     minDetectionConfidence: 0.5,
     minTrackingConfidence:  0.5,
   });
   pose.onResults(onResults);
 
   let busy = false;
-  let errCount = 0;
-
-  async function initPose() {
-    const p = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
-    p.setOptions({
-      modelComplexity:        0,
-      smoothLandmarks:        true,
-      enableSegmentation:     true,
-      smoothSegmentation:     true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence:  0.5,
-    });
-    p.onResults(onResults);
-    await p.initialize();
-    return p;
-  }
-
-  let activePose = pose;
-
   function loop() {
     if (!busy && video.readyState >= 2) {
       busy = true;
-      activePose.send({ image: video })
-        .then(() => { errCount = 0; })
-        .catch(() => {
-          errCount++;
-          // После 3 ошибок подряд — пересоздаём экземпляр MediaPipe
-          if (errCount >= 3) {
-            errCount = 0;
-            initPose().then(p => { activePose = p; }).catch(() => {});
-          }
-        })
-        .finally(() => { busy = false; });
+      pose.send({ image: video }).finally(() => { busy = false; });
     }
     requestAnimationFrame(loop);
   }
