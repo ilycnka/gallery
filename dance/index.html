@@ -213,90 +213,150 @@
   }
 
   // ── Диск ──────────────────────────────────────────────────────────────────
-  let diskActive    = false;
-  let diskAngle     = 0;   // накопленный угол вращения
-  let lastArmAngle  = null; // угол предплесья в прошлом кадре
+  let diskAngle    = 0;
+  let lastArmAngle = null;
+  let diskAngVel   = 0;   // сглаженная угловая скорость (рад/кадр)
+  let diskScale    = 1;   // текущий множитель радиуса
+  let diskBright   = 0;   // яркость 0–1
+
+  // частицы диска: { x, y, vx, vy, life, maxLife, r, hue }
+  const diskParts = [];
 
   // Жест: правый локоть отведён в сторону (верхнее плечо ~горизонтально)
   function elbowDiskGesture(lms) {
     const vs = lv(lms, 12), ve = lv(lms, 14), vw = lv(lms, 16);
     if (vs < 0.4 || ve < 0.4 || vw < 0.4) return null;
-
     const sx = lx(lms, 12), sy = ly(lms, 12);
     const ex = lx(lms, 14), ey = ly(lms, 14);
-
-    // плечо отведено в сторону: локоть правее плеча на экране
-    // и верхняя часть руки ~горизонтальна (dy < 0.4 * dx)
-    const dx = ex - sx;
-    const dy = Math.abs(ey - sy);
+    const dx = ex - sx, dy = Math.abs(ey - sy);
     const shoulderW = Math.abs(lx(lms, 11) - lx(lms, 12));
-    if (dx < shoulderW * 0.7) return null;   // недостаточно в сторону
-    if (dy > dx * 0.55) return null;          // рука слишком поднята/опущена
-
+    if (dx < shoulderW * 0.7) return null;
+    if (dy > dx * 0.55)       return null;
     return { ex, ey, wx: lx(lms, 16), wy: ly(lms, 16) };
+  }
+
+  function spawnDiskParticles(ex, ey, baseR, displayR, delta) {
+    const speed = Math.abs(diskAngVel);
+    const count = Math.floor(speed / 0.015) + 1; // больше частиц = быстрее
+    const spinDir = Math.sign(delta || 1);
+    for (let i = 0; i < count; i++) {
+      // случайный угол на краю диска
+      const a = Math.random() * Math.PI * 2;
+      const r = displayR * (0.85 + Math.random() * 0.2);
+      const px = ex + Math.cos(a) * r;
+      const py = ey + Math.sin(a) * r;
+      // скорость: тангенциальная (по направлению вращения) + разлёт наружу
+      const tang = a + spinDir * Math.PI / 2;
+      const spd  = 1.5 + speed * 60 + Math.random() * 2;
+      diskParts.push({
+        x: px, y: py,
+        vx: Math.cos(tang) * spd * 0.6 + Math.cos(a) * spd * 0.5,
+        vy: Math.sin(tang) * spd * 0.6 + Math.sin(a) * spd * 0.5,
+        life: 1,
+        maxLife: 40 + Math.random() * 40,
+        r: 1.5 + Math.random() * 2.5,
+        hue: 185 + Math.random() * 60, // циан→синий→фиолетовый
+      });
+    }
+  }
+
+  function updateDiskParticles() {
+    ctx.save();
+    ctx.shadowBlur = 8;
+    for (let i = diskParts.length - 1; i >= 0; i--) {
+      const p = diskParts[i];
+      p.x  += p.vx; p.y += p.vy;
+      p.vx *= 0.94; p.vy *= 0.94;
+      p.life -= 1 / p.maxLife;
+      if (p.life <= 0) { diskParts.splice(i, 1); continue; }
+      const a = p.life * p.life; // квадратичное затухание
+      ctx.globalAlpha = a * 0.9;
+      ctx.shadowColor = `hsl(${p.hue},100%,70%)`;
+      ctx.fillStyle   = `hsl(${p.hue},100%,${70 + (1 - p.life) * 20}%)`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * p.life + 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawDisk(g) {
     const { ex, ey, wx, wy } = g;
-    const radius = Math.hypot(wx - ex, wy - ey);
-    if (radius < 20) return;
+    const baseR = Math.hypot(wx - ex, wy - ey);
+    if (baseR < 20) return;
 
-    // угол предплесья → накапливаем дельту
+    // угол предплесья → скорость → масштаб
     const armAngle = Math.atan2(wy - ey, wx - ex);
+    let delta = 0;
     if (lastArmAngle !== null) {
-      let delta = armAngle - lastArmAngle;
+      delta = armAngle - lastArmAngle;
       if (delta >  Math.PI) delta -= 2 * Math.PI;
       if (delta < -Math.PI) delta += 2 * Math.PI;
       diskAngle += delta;
     }
     lastArmAngle = armAngle;
 
+    // сглаживаем скорость и плавно двигаем масштаб/яркость
+    diskAngVel  = diskAngVel * 0.82 + Math.abs(delta) * 0.18;
+    const t     = Math.min(diskAngVel / 0.10, 1); // 0→1 при скорости 0→0.10 рад/кадр
+    diskScale  += (1 + t * 2.8 - diskScale)  * 0.08;
+    diskBright += (t - diskBright)            * 0.08;
+
+    const displayR = baseR * diskScale;
+
+    // частицы пропорционально скорости
+    if (diskAngVel > 0.005) spawnDiskParticles(ex, ey, baseR, displayR, delta);
+
     ctx.save();
     ctx.translate(ex, ey);
     ctx.rotate(diskAngle);
 
-    // заливка: радиальный градиент
-    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-    grad.addColorStop(0,   'rgba(80,200,255,0.45)');
-    grad.addColorStop(0.55,'rgba(60,140,255,0.25)');
-    grad.addColorStop(1,   'rgba(40, 80,255,0.0)');
+    // заливка
+    const fill = ctx.createRadialGradient(0, 0, 0, 0, 0, displayR);
+    const a0 = 0.35 + diskBright * 0.40;
+    const a1 = 0.15 + diskBright * 0.25;
+    fill.addColorStop(0,    `rgba(80,200,255,${a0})`);
+    fill.addColorStop(0.55, `rgba(60,140,255,${a1})`);
+    fill.addColorStop(1,    'rgba(40,80,255,0)');
     ctx.globalAlpha = 1;
-    ctx.fillStyle   = grad;
+    ctx.fillStyle   = fill;
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, displayR, 0, Math.PI * 2);
     ctx.fill();
 
-    // внешнее светящееся кольцо
-    ctx.shadowColor = '#50c8ff';
-    ctx.shadowBlur  = 20;
-    ctx.strokeStyle = 'rgba(120,210,255,0.85)';
-    ctx.lineWidth   = 2;
+    // кольцо — ярче и толще со скоростью
+    const ringBlur = 20 + diskBright * 35;
+    const ringW    =  2 + diskBright *  4;
+    ctx.shadowColor = `hsl(${195 + diskBright * 30},100%,70%)`;
+    ctx.shadowBlur  = ringBlur;
+    ctx.strokeStyle = `rgba(${120 + diskBright * 80|0},210,255,${0.75 + diskBright * 0.25})`;
+    ctx.lineWidth   = ringW;
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, displayR, 0, Math.PI * 2);
     ctx.stroke();
 
-    // спицы (8 штук), одна — направление запястья
+    // спицы
     const SPOKES = 8;
     for (let k = 0; k < SPOKES; k++) {
       const a   = (k / SPOKES) * Math.PI * 2;
-      const hot = k === 0; // нулевая спица = текущее направление предплесья
-      ctx.globalAlpha = hot ? 0.9 : 0.2;
-      ctx.strokeStyle = hot ? '#fff' : 'rgba(120,210,255,0.6)';
-      ctx.lineWidth   = hot ? 2 : 1;
-      ctx.shadowBlur  = hot ? 12 : 0;
+      const hot = k === 0;
+      ctx.globalAlpha = hot ? 0.85 + diskBright * 0.15 : 0.12 + diskBright * 0.15;
+      ctx.strokeStyle = hot ? '#fff' : `rgba(120,210,255,0.6)`;
+      ctx.lineWidth   = hot ? 2 + diskBright * 2 : 1;
+      ctx.shadowBlur  = hot ? 10 + diskBright * 20 : 0;
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(a) * radius, Math.sin(a) * radius);
+      ctx.lineTo(Math.cos(a) * displayR, Math.sin(a) * displayR);
       ctx.stroke();
     }
 
-    // центральный хаб
+    // хаб
     ctx.globalAlpha = 1;
     ctx.fillStyle   = '#fff';
     ctx.shadowColor = '#50c8ff';
-    ctx.shadowBlur  = 14;
+    ctx.shadowBlur  = 14 + diskBright * 20;
     ctx.beginPath();
-    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.arc(0, 0, 4 + diskBright * 4, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
@@ -304,16 +364,22 @@
 
   function onResults(results) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // частицы живут независимо от жеста
+    updateDiskParticles();
+
     const lms = results.poseLandmarks;
     if (!lms) return;
 
     const g = elbowDiskGesture(lms);
     if (g) {
-      diskActive = true;
       drawDisk(g);
     } else {
-      diskActive   = false;
       lastArmAngle = null;
+      // скорость и масштаб плавно гаснут
+      diskAngVel *= 0.88;
+      diskScale  += (1 - diskScale) * 0.06;
+      diskBright += (0 - diskBright) * 0.06;
     }
 
     drawSkeleton(smoothShoulders(lms));
