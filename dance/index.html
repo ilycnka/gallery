@@ -244,9 +244,35 @@
   let diskBright   = 0;
   let diskBaseR    = 0;
   let diskEx = 0, diskEy = 0;
+  let diskWasActive = false; // для определения момента активации
 
   const diskParts = [];
-  const MAX_PARTS = 130;
+  const MAX_PARTS = 160;
+
+  // Мгновенный спавн кольца покоящихся частиц при первой активации жеста
+  function spawnIdleRing(ex, ey, displayR) {
+    diskParts.length = 0; // чистим старые
+    const count = 48;
+    for (let i = 0; i < count; i++) {
+      const a    = (i / count) * Math.PI * 2 + Math.random() * 0.25;
+      const frac = 0.55 + Math.random() * 0.45;
+      const r    = Math.min(displayR * frac, displayR * 1.25);
+      // минимальная скорость — частицы "стоят" на орбите
+      const tang = a + diskDir * Math.PI / 2;
+      const spd  = 0.2 + Math.random() * 0.6;
+      diskParts.push({
+        x: ex + Math.cos(a) * r,
+        y: ey + Math.sin(a) * r,
+        vx: Math.cos(tang) * spd,
+        vy: Math.sin(tang) * spd,
+        life: 1,
+        maxLife: 90 + Math.random() * 70,
+        sz: 1.5 + Math.random() * 1.8,
+        hue: 185 + Math.random() * 55,
+        t: 0.25,
+      });
+    }
+  }
 
   // Offscreen canvas для диска — пересоздаётся только при смене размера/яркости
   const glowCanvas = document.createElement('canvas');
@@ -414,6 +440,14 @@
 
     diskEx = ex; diskEy = ey; diskBaseR = baseR;
 
+    // первый кадр жеста — мгновенный свет и кольцо частиц
+    if (!diskWasActive) {
+      diskBright = 0.55;
+      diskScale  = 1;
+      spawnIdleRing(ex, ey, baseR);
+    }
+    diskWasActive = true;
+
     const armAngle = Math.atan2(wy - ey, wx - ex);
     let delta = 0;
     if (lastArmAngle !== null) {
@@ -451,7 +485,8 @@
       drawDisk(g);
     } else {
       lastArmAngle = null;
-      tickDisk(); // диск плавно гасится по инерции
+      diskWasActive = false;
+      tickDisk();
     }
 
     if (skeletonVisible) drawSkeleton(smoothShoulders(lms));
