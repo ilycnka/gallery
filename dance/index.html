@@ -74,6 +74,28 @@
   function ly(lms, i) { return lms[i].y * canvas.height; }
   function lv(lms, i) { return lms[i].visibility ?? 0; }
 
+  // Сглаживание только для плеч (11, 12) — руки без задержки, плечи стабильны
+  const SHOULDER_IDS = [11, 12];
+  const shoulderBuf = {};
+  const SHOULDER_ALPHA = 0.25;
+  SHOULDER_IDS.forEach(id => { shoulderBuf[id] = null; });
+
+  function smoothShoulders(lms) {
+    SHOULDER_IDS.forEach(id => {
+      const l = lms[id];
+      const v = l.visibility ?? 0;
+      if (!shoulderBuf[id]) {
+        shoulderBuf[id] = { x: l.x, y: l.y, visibility: v };
+      } else {
+        shoulderBuf[id].x          += (l.x - shoulderBuf[id].x) * SHOULDER_ALPHA;
+        shoulderBuf[id].y          += (l.y - shoulderBuf[id].y) * SHOULDER_ALPHA;
+        shoulderBuf[id].visibility += (v   - shoulderBuf[id].visibility) * SHOULDER_ALPHA;
+      }
+      lms[id] = shoulderBuf[id];
+    });
+    return lms;
+  }
+
   // Вычисляет виртуальную точку — макушку головы (выше носа)
   function crownPoint(lms) {
     const nose    = lms[0];
@@ -193,7 +215,7 @@
   function onResults(results) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const lms = results.poseLandmarks;
-    if (lms) drawSkeleton(lms);
+    if (lms) drawSkeleton(smoothShoulders(lms));
   }
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
