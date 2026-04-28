@@ -445,7 +445,7 @@
           <div class="task-info">
             <b>Мои документы</b>
             Системная папка<br><br>
-            Объектов: 3
+            Объектов: 2
           </div>
         </div>
       </div>
@@ -486,28 +486,12 @@
         <span class="folder-label">VR интерфейсы</span>
       </a>
 
-      <a href="void/" class="folder" data-name="Солнечная система" data-info="Папка файлов • 1 объект">
-        <svg class="folder-svg" viewBox="0 0 48 40" fill="none">
-          <rect x="0" y="10" width="48" height="28" rx="2" fill="#f0c040"/>
-          <rect x="0" y="10" width="48" height="28" rx="2" fill="url(#fg3)"/>
-          <path d="M0 14 Q0 10 4 10 L16 10 L19 6 L44 6 Q48 6 48 10 L48 10 L0 10 Z" fill="#f8d860"/>
-          <rect x="1" y="11" width="46" height="26" rx="1.5" fill="none" stroke="#d09820" stroke-width="0.5" opacity="0.5"/>
-          <defs>
-            <linearGradient id="fg3" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#fff" stop-opacity="0.25"/>
-              <stop offset="100%" stop-color="#000" stop-opacity="0.08"/>
-            </linearGradient>
-          </defs>
-        </svg>
-        <span class="folder-label">Солнечная система</span>
-      </a>
-
     </div>
   </div>
 
   <!-- Строка состояния -->
   <div class="statusbar">
-    <div class="status-panel" id="statusLeft">3 объекта</div>
+    <div class="status-panel" id="statusLeft">2 объекта</div>
     <div class="status-panel" id="statusRight" style="border-right:none"></div>
   </div>
 
@@ -578,10 +562,10 @@
   document.getElementById('fileArea').addEventListener('click', e => {
     if (e.target === e.currentTarget) {
       folders.forEach(x => x.classList.remove('selected'));
-      statusLeft.textContent  = '3 объекта';
+      statusLeft.textContent  = '2 объекта';
       statusRight.textContent = '';
       detailBox.querySelector('.task-info').innerHTML =
-        '<b>Мои документы</b>Системная папка<br><br>Объектов: 3';
+        '<b>Мои документы</b>Системная папка<br><br>Объектов: 2';
     }
   });
 
