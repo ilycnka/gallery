@@ -244,7 +244,9 @@
   let diskBright   = 0;
   let diskBaseR    = 0;
   let diskEx = 0, diskEy = 0;
-  let diskWasActive = false; // для определения момента активации
+  let diskWasActive  = false;
+  let diskHoldFrames = 0;
+  const DISK_HOLD    = 25; // кадров удержания после потери жеста (~0.8с)
 
   const diskParts = [];
   const MAX_PARTS = 160;
@@ -269,7 +271,7 @@
         maxLife: 90 + Math.random() * 70,
         sz: 1.5 + Math.random() * 1.8,
         hue: 185 + Math.random() * 55,
-        t: 0.25,
+        t: 0.7, // яркие с самого начала
       });
     }
   }
@@ -389,7 +391,7 @@
       const spd  = Math.hypot(p.vx, p.vy);
       const dist = Math.hypot(p.x - cx, p.y - cy);
 
-      if (dist > 2 && spd > 0.3) {
+      if (dist > 2 && spd > 0.08) {
         const curA    = Math.atan2(p.y - cy, p.x - cx);
         const angSpan = Math.min((spd / dist) * 5 * p.life, Math.PI * 0.5);
         const startA  = curA - diskDir * angSpan;
@@ -482,11 +484,18 @@
 
     const g = elbowDiskGesture(lms);
     if (g) {
+      diskHoldFrames = DISK_HOLD;
       drawDisk(g);
     } else {
       lastArmAngle = null;
       diskWasActive = false;
-      tickDisk();
+      if (diskHoldFrames > 0) {
+        // держим диск без угасания — жест мог прерваться на долю секунды
+        diskHoldFrames--;
+        renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
+      } else {
+        tickDisk();
+      }
     }
 
     if (skeletonVisible) drawSkeleton(smoothShoulders(lms));
