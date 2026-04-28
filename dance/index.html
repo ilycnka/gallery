@@ -246,7 +246,17 @@
   let diskEx = 0, diskEy = 0;
   let diskWasActive  = false;
   let diskHoldFrames = 0;
-  const DISK_HOLD    = 25; // кадров удержания после потери жеста (~0.8с)
+  const DISK_HOLD    = 25;
+
+  // Стейт-машин: inactive → active → floating → grabbed → exploding
+  const DS = { INACTIVE: 0, ACTIVE: 1, FLOATING: 2, GRABBED: 3, EXPLODING: 4 };
+  let diskState    = DS.INACTIVE;
+  let diskFloatT0  = 0;   // timestamp начала float
+  let diskGrabT0   = 0;   // timestamp начала grab
+  let grabPalmX    = 0, grabPalmY = 0;
+  const FLOAT_MS   = 3000;
+  const GRAB_MS    = 5000;
+  const MIN_FLOAT_V = 0.048; // минимальная скорость чтобы диск завис
 
   const diskParts = [];
   const MAX_PARTS = 160;
@@ -390,6 +400,25 @@
     for (let i = diskParts.length - 1; i >= 0; i--) {
       const p = diskParts[i];
 
+      // летящие частицы взрыва
+      if (p.type === 'fly') {
+        p.x  += p.vx; p.y += p.vy;
+        p.vx *= 0.93; p.vy *= 0.93;
+        p.life -= 1 / p.maxLife;
+        if (p.life <= 0) { diskParts.splice(i, 1); continue; }
+        const a = p.life * p.life * p.bright;
+        ctx.globalAlpha = a;
+        ctx.lineWidth   = p.sz * p.life + 0.3;
+        ctx.strokeStyle = `hsl(${p.hue},100%,${88 + p.bright * 10}%)`;
+        const ang = Math.atan2(p.vy, p.vx);
+        const len = Math.hypot(p.vx, p.vy) * 3 * p.life;
+        ctx.beginPath();
+        ctx.moveTo(p.x - Math.cos(ang) * len, p.y - Math.sin(ang) * len);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        continue;
+      }
+
       // обновляем орбитальный угол — частица СТРОГО по окружности
       p.orbitSpd = BASE_ORB_SPD + diskAngVel * 3.8; // синхронизируем со скоростью
       p.orbitA  += p.orbitSpd * diskDir;
@@ -428,10 +457,47 @@
   function tickDisk() {
     diskAngVel *= 0.96;
     const t = Math.min(diskAngVel / 0.09, 1);
-    diskBright += (t * 0.45 - diskBright) * 0.05; // гасится до 0 при v→0
+    diskBright += (t * 0.45 - diskBright) * 0.05;
     if (diskAngVel < 0.0003 && diskBright < 0.02) return;
     const displayR = diskBaseR * diskScale;
     renderDiskShape(diskEx, diskEy, displayR);
+  }
+
+  // Взрыв: 150 частиц разлетаются во все стороны
+  function spawnExplosion() {
+    const cx = diskEx, cy = diskEy;
+    const r  = diskBaseR * diskScale;
+    diskParts.length = 0;
+    for (let i = 0; i < 150; i++) {
+      const a   = Math.random() * Math.PI * 2;
+      const spd = 3 + Math.random() * 11;
+      diskParts.push({
+        type:    'fly',
+        x:       cx + Math.cos(a) * r * Math.random(),
+        y:       cy + Math.sin(a) * r * Math.random(),
+        vx:      Math.cos(a) * spd,
+        vy:      Math.sin(a) * spd,
+        life:    1,
+        maxLife: 55 + Math.random() * 55,
+        sz:      1.8 + Math.random() * 3,
+        hue:     185 + Math.random() * 55,
+        bright:  0.95,
+      });
+    }
+    diskBright = 1.0; // вспышка
+  }
+
+  // Возвращает ближайшую ладонь к точке (tx,ty) в экранных координатах
+  function nearestPalm(lms, tx, ty) {
+    const lp = palmPoint(lms, 15, 19, 17);
+    const rp = palmPoint(lms, 16, 20, 18);
+    const lpx = (1 - lp.x) * canvas.width,  lpy = lp.y * canvas.height;
+    const rpx = (1 - rp.x) * canvas.width,  rpy = rp.y * canvas.height;
+    const ld  = lp.visibility > 0.3 ? Math.hypot(lpx - tx, lpy - ty) : Infinity;
+    const rd  = rp.visibility > 0.3 ? Math.hypot(rpx - tx, rpy - ty) : Infinity;
+    if (ld < rd) return { x: lpx, y: lpy, d: ld };
+    if (rd < Infinity) return { x: rpx, y: rpy, d: rd };
+    return null;
   }
 
   function drawDisk(g) {
@@ -444,6 +510,7 @@
     if (!diskWasActive) {
       diskBright = 0.60;
       diskScale  = 1;
+      diskState  = DS.ACTIVE;
       spawnIdleRing(ex, ey, baseR);
     }
     diskWasActive = true;
@@ -476,25 +543,101 @@
     updateDiskParticles();
 
     const lms = results.poseLandmarks;
-    if (!lms) return;
 
-    const g = elbowDiskGesture(lms);
-    if (g) {
-      diskHoldFrames = DISK_HOLD;
-      drawDisk(g);
-    } else {
-      lastArmAngle = null;
-      diskWasActive = false;
-      if (diskHoldFrames > 0) {
-        // держим диск без угасания — жест мог прерваться на долю секунды
-        diskHoldFrames--;
-        renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
+    // ── Стейт-машин диска ──────────────────────────────────────────────────
+    const now = performance.now();
+
+    if (diskState === DS.ACTIVE) {
+      const g = lms && elbowDiskGesture(lms);
+      if (g) {
+        diskHoldFrames = DISK_HOLD;
+        drawDisk(g);
       } else {
-        tickDisk();
+        lastArmAngle = null;
+        diskWasActive = false;
+        if (diskHoldFrames > 0) {
+          diskHoldFrames--;
+          renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
+        } else {
+          // скорость была высокой — диск зависает
+          if (diskAngVel >= MIN_FLOAT_V) {
+            diskState   = DS.FLOATING;
+            diskFloatT0 = now;
+          } else {
+            diskState = DS.INACTIVE;
+            tickDisk();
+          }
+        }
+      }
+
+    } else if (diskState === DS.FLOATING) {
+      const elapsed = now - diskFloatT0;
+      const frac    = elapsed / FLOAT_MS; // 0→1
+
+      // пульсирующее кольцо-подсказка «схвати меня»
+      diskBright = 0.45 + Math.sin(now / 200) * 0.12;
+      maintainOrbitPool(diskBaseR);
+      renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
+
+      // проверяем ближайшую ладонь
+      if (lms) {
+        const palm = nearestPalm(lms, diskEx, diskEy);
+        if (palm && palm.d < diskBaseR * 1.6) {
+          // схвачено!
+          diskState  = DS.GRABBED;
+          diskGrabT0 = now;
+          grabPalmX  = palm.x;
+          grabPalmY  = palm.y;
+        }
+      }
+
+      if (elapsed >= FLOAT_MS) {
+        // время вышло — взрыв
+        diskState = DS.EXPLODING;
+        spawnExplosion();
+      }
+
+    } else if (diskState === DS.GRABBED) {
+      // обновляем позицию ладони
+      if (lms) {
+        const palm = nearestPalm(lms, grabPalmX, grabPalmY);
+        if (palm) { grabPalmX = palm.x; grabPalmY = palm.y; }
+      }
+      diskEx = grabPalmX; diskEy = grabPalmY;
+
+      const elapsed = now - diskGrabT0;
+      // яркость нарастает к финалу
+      diskBright = 0.55 + (elapsed / GRAB_MS) * 0.4;
+      maintainOrbitPool(diskBaseR);
+      renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
+
+      if (elapsed >= GRAB_MS) {
+        diskState = DS.EXPLODING;
+        spawnExplosion();
+      }
+
+    } else if (diskState === DS.EXPLODING) {
+      // вспышка гаснет
+      diskBright *= 0.88;
+      if (diskBright > 0.05) renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
+      // возвращаемся в inactive когда все частицы умерли
+      if (diskParts.length === 0) {
+        diskState  = DS.INACTIVE;
+        diskBright = 0;
+        diskAngVel = 0;
+      }
+
+    } else {
+      // DS.INACTIVE — ждём жест
+      if (lms && elbowDiskGesture(lms)) {
+        diskState = DS.ACTIVE;
+        diskHoldFrames = DISK_HOLD;
+        drawDisk(elbowDiskGesture(lms));
       }
     }
+    // ──────────────────────────────────────────────────────────────────────
 
-    if (skeletonVisible) drawSkeleton(smoothShoulders(lms));
+    if (lms && skeletonVisible) drawSkeleton(smoothShoulders(lms));
   }
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
