@@ -73,6 +73,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 <script>
   const video    = document.getElementById('video');
   const canvas   = document.getElementById('canvas');
@@ -92,6 +93,52 @@
   }
   resize();
   window.addEventListener('resize', resize);
+
+  // ── Распознавание рук ─────────────────────────────────────────────────────
+  // { gesture: 'fist'|'open'|'neutral', x, y } в экранных координатах
+  let latestHand = null;
+
+  // центр ладони: среднее запястья и оснований пальцев
+  function handCenter(hl) {
+    const ids = [0, 5, 9, 13, 17];
+    let sx = 0, sy = 0;
+    ids.forEach(i => { sx += hl[i].x; sy += hl[i].y; });
+    return {
+      x: (1 - sx / ids.length) * canvas.width,
+      y:      sy / ids.length  * canvas.height,
+    };
+  }
+
+  // ориентационно-инвариантное: сравниваем расстояние кончика до запястья
+  // с расстоянием от основания (MCP) до запястья
+  function detectHandGesture(hl) {
+    const TIPS = [8, 12, 16, 20];
+    const MCPS = [5,  9, 13, 17];
+    const w = hl[0];
+    let curled = 0;
+    for (let i = 0; i < 4; i++) {
+      const td = Math.hypot(hl[TIPS[i]].x - w.x, hl[TIPS[i]].y - w.y);
+      const md = Math.hypot(hl[MCPS[i]].x - w.x, hl[MCPS[i]].y - w.y);
+      if (td < md * 1.15) curled++;
+    }
+    return curled >= 3 ? 'fist' : curled <= 1 ? 'open' : 'neutral';
+  }
+
+  const handsModel = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
+  handsModel.setOptions({
+    maxNumHands:            1,
+    modelComplexity:        0,  // быстрая модель
+    minDetectionConfidence: 0.55,
+    minTrackingConfidence:  0.5,
+  });
+  handsModel.onResults(res => {
+    if (!res.multiHandLandmarks?.length) { latestHand = null; return; }
+    const hl  = res.multiHandLandmarks[0];
+    const pos = handCenter(hl);
+    latestHand = { gesture: detectHandGesture(hl), ...pos };
+  });
 
   function lx(lms, i) { return (1 - lms[i].x) * canvas.width; }
   function ly(lms, i) { return lms[i].y * canvas.height; }
@@ -572,41 +619,42 @@
 
     } else if (diskState === DS.FLOATING) {
       const elapsed = now - diskFloatT0;
-      const frac    = elapsed / FLOAT_MS; // 0→1
 
-      // пульсирующее кольцо-подсказка «схвати меня»
-      diskBright = 0.45 + Math.sin(now / 200) * 0.12;
+      // пульсирующая подсказка «сожми кулак в центре»
+      diskBright = 0.42 + Math.sin(now / 180) * 0.13;
       maintainOrbitPool(diskBaseR);
       renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
 
-      // проверяем ближайшую ладонь
-      if (lms) {
-        const palm = nearestPalm(lms, diskEx, diskEy);
-        if (palm && palm.d < diskBaseR * 1.6) {
-          // схвачено!
+      // захват — кулак в радиусе диска
+      if (latestHand?.gesture === 'fist') {
+        const d = Math.hypot(latestHand.x - diskEx, latestHand.y - diskEy);
+        if (d < diskBaseR * 1.5) {
           diskState  = DS.GRABBED;
           diskGrabT0 = now;
-          grabPalmX  = palm.x;
-          grabPalmY  = palm.y;
+          grabPalmX  = latestHand.x;
+          grabPalmY  = latestHand.y;
         }
       }
 
       if (elapsed >= FLOAT_MS) {
-        // время вышло — взрыв
         diskState = DS.EXPLODING;
         spawnExplosion();
       }
 
     } else if (diskState === DS.GRABBED) {
-      // обновляем позицию ладони
-      if (lms) {
-        const palm = nearestPalm(lms, grabPalmX, grabPalmY);
-        if (palm) { grabPalmX = palm.x; grabPalmY = palm.y; }
+      // диск следует за ладонью
+      if (latestHand) {
+        grabPalmX = latestHand.x;
+        grabPalmY = latestHand.y;
+        // раскрытая ладонь — взрыв
+        if (latestHand.gesture === 'open') {
+          diskState = DS.EXPLODING;
+          spawnExplosion();
+        }
       }
       diskEx = grabPalmX; diskEy = grabPalmY;
 
       const elapsed = now - diskGrabT0;
-      // яркость нарастает к финалу
       diskBright = 0.55 + (elapsed / GRAB_MS) * 0.4;
       maintainOrbitPool(diskBaseR);
       renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
@@ -651,11 +699,16 @@
   });
   pose.onResults(onResults);
 
-  let busy = false;
+  let poseBusy = false, handsBusy = false, hTick = 0;
   function loop() {
-    if (!busy && video.readyState >= 2) {
-      busy = true;
-      pose.send({ image: video }).finally(() => { busy = false; });
+    if (!poseBusy && video.readyState >= 2) {
+      poseBusy = true;
+      pose.send({ image: video }).finally(() => { poseBusy = false; });
+    }
+    // руки каждый 3-й кадр — достаточно для жестов
+    if (!handsBusy && video.readyState >= 2 && hTick++ % 3 === 0) {
+      handsBusy = true;
+      handsModel.send({ image: video }).finally(() => { handsBusy = false; });
     }
     requestAnimationFrame(loop);
   }
