@@ -14,6 +14,13 @@
       object-fit: cover;
       transform: scaleX(-1);
     }
+    #colorOverlay {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      mix-blend-mode: difference;
+      pointer-events: none;
+    }
     #canvas {
       position: fixed; inset: 0;
       width: 100%; height: 100%;
@@ -43,8 +50,8 @@
       font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
       color: rgba(255,255,255,0.35); white-space: nowrap;
     }
-    #toggleSkeleton {
-      position: absolute; bottom: 28px; right: 18px;
+    .ui-btn {
+      position: absolute;
       pointer-events: all;
       color: rgba(255,255,255,0.55);
       font-size: 11px; letter-spacing: 0.08em;
@@ -56,28 +63,42 @@
       transition: color 0.2s, background 0.2s;
       user-select: none;
     }
-    #toggleSkeleton:hover { color: #fff; background: rgba(0,0,0,0.65); }
-    #toggleSkeleton.hidden { color: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.06); }
+    .ui-btn:hover { color: #fff; background: rgba(0,0,0,0.65); }
+    .ui-btn.hidden { color: rgba(255,255,255,0.25); border-color: rgba(255,255,255,0.06); }
+    #toggleSkeleton { bottom: 28px; right: 18px; }
+    #changeMode     { bottom: 28px; right: 100px; }
   </style>
 </head>
 <body>
 
 <video id="video" autoplay playsinline muted></video>
+<canvas id="colorOverlay"></canvas>
 <canvas id="canvas"></canvas>
 
 <div id="ui">
   <a id="back" href="../vr/">← назад</a>
   <span id="label">Dance Room</span>
   <div id="status">Загрузка...</div>
-  <button id="toggleSkeleton">скелет</button>
+  <button id="changeMode" class="ui-btn">change mode</button>
+  <button id="toggleSkeleton" class="ui-btn">скелет</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 <script>
-  const video    = document.getElementById('video');
-  const canvas   = document.getElementById('canvas');
-  const ctx      = canvas.getContext('2d');
-  const statusEl = document.getElementById('status');
+  const video         = document.getElementById('video');
+  const canvas        = document.getElementById('canvas');
+  const ctx           = canvas.getContext('2d');
+  const overlayCanvas = document.getElementById('colorOverlay');
+  const overlayCtx    = overlayCanvas.getContext('2d');
+  const statusEl      = document.getElementById('status');
+
+  // Силуэт тела
+  const silCv   = document.createElement('canvas');
+  const maskCtx = silCv.getContext('2d');
+  let   silFlash = 0;
+
+  // Детектор ударов / хлопков (Web Audio)
+  let beatAnalyser = null, beatTimeBuf = null, beatEnv = 0;
 
   let skeletonVisible = true;
   const toggleBtn = document.getElementById('toggleSkeleton');
@@ -86,9 +107,16 @@
     toggleBtn.classList.toggle('hidden', !skeletonVisible);
   });
 
+  let renderMode = 0; // 0 — скелет, 1 — точки тела
+  const changeModeBtn = document.getElementById('changeMode');
+  changeModeBtn.addEventListener('click', () => {
+    renderMode = (renderMode + 1) % 2;
+    changeModeBtn.textContent = renderMode === 0 ? 'change mode' : 'change mode ●';
+  });
+
   function resize() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width  = overlayCanvas.width  = window.innerWidth;
+    canvas.height = overlayCanvas.height = window.innerHeight;
   }
   resize();
   window.addEventListener('resize', resize);
@@ -200,7 +228,6 @@
       });
     });
 
-    // Суставы
     ctx.fillStyle   = '#fff';
     ctx.shadowColor = '#fff';
     ctx.shadowBlur  = 12;
@@ -213,300 +240,841 @@
       ctx.fill();
     }
 
+    ctx.shadowBlur = 0;
+    ctx.font       = 'bold 10px monospace';
+    ctx.textAlign  = 'left';
+    for (let i = 0; i < lms.length; i++) {
+      const v = lv(lms, i);
+      if (v < VIS_MIN) continue;
+      ctx.globalAlpha = Math.min(v, 0.8);
+      ctx.fillStyle   = '#ffff00';
+      ctx.fillText(i, lx(lms, i) + 6, ly(lms, i) - 4);
+    }
+
+    function drawShoulderAngle(px, py, dx, dy, color) {
+      const rad  = Math.atan2(dy, dx);
+      const deg  = Math.round(rad * 180 / Math.PI);
+      const arcR = 26;
+      ctx.save();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = color; ctx.globalAlpha = 0.65;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + arcR, py); ctx.stroke();
+      ctx.beginPath(); ctx.arc(px, py, arcR, 0, rad, rad < 0); ctx.stroke();
+      ctx.globalAlpha = 0.9; ctx.fillStyle = color;
+      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.shadowBlur = 0;
+      ctx.fillText(deg + '°', px, py + 18);
+      ctx.restore();
+    }
+
+    if (lv(lms, 12) >= VIS_MIN && lv(lms, 14) >= VIS_MIN)
+      drawShoulderAngle(lx(lms,12), ly(lms,12), lx(lms,14)-lx(lms,12), ly(lms,14)-ly(lms,12), '#00ffcc');
+    if (lv(lms, 11) >= VIS_MIN && lv(lms, 13) >= VIS_MIN)
+      drawShoulderAngle(lx(lms,11), ly(lms,11), lx(lms,13)-lx(lms,11), ly(lms,13)-ly(lms,11), '#ff9f0a');
+
     ctx.restore();
 
-    // Макушка головы
-    if (crown.visibility > VIS_MIN) {
-      const cx = (1 - crown.x) * canvas.width;
-      const cy = crown.y * canvas.height;
-      drawMarker(cx, cy, 10, '#a78bfa', crown.visibility);
-    }
-
-    // Ладони
-    if (leftPalm.visibility > VIS_MIN) {
-      const px = (1 - leftPalm.x) * canvas.width;
-      const py = leftPalm.y * canvas.height;
-      drawMarker(px, py, 12, '#ff9f0a', leftPalm.visibility);
-    }
-    if (rightPalm.visibility > VIS_MIN) {
-      const px = (1 - rightPalm.x) * canvas.width;
-      const py = rightPalm.y * canvas.height;
-      drawMarker(px, py, 12, '#ff9f0a', rightPalm.visibility);
-    }
+    if (crown.visibility > VIS_MIN)
+      drawMarker((1-crown.x)*canvas.width, crown.y*canvas.height, 10, '#a78bfa', crown.visibility);
+    if (leftPalm.visibility > VIS_MIN)
+      drawMarker((1-leftPalm.x)*canvas.width, leftPalm.y*canvas.height, 12, '#ff9f0a', leftPalm.visibility);
+    if (rightPalm.visibility > VIS_MIN)
+      drawMarker((1-rightPalm.x)*canvas.width, rightPalm.y*canvas.height, 12, '#ff9f0a', rightPalm.visibility);
   }
 
-  // ── Диск ──────────────────────────────────────────────────────────────────
-  let diskAngle    = 0;
-  let diskDir      = 1;
-  let lastArmAngle = null;
-  let diskAngVel   = 0;
-  let diskScale    = 1;
-  let diskBright   = 0;
-  let diskBaseR    = 0;
-  let diskEx = 0, diskEy = 0;
-  let diskWasActive  = false;
-  let diskHoldFrames = 0;
-  const DISK_HOLD    = 40; // кадров удержания после потери жеста (~1.2с)
+  // ── Облако частиц вокруг точки 14 ────────────────────────────────────────
+  const cloudParts    = [];
+  let   cloudCx       = 0, cloudCy = 0;
+  let   cloudWasActive = false;
+  let   wristLastAngle = null;
+  let   cloudAngVel    = 0;
+  let   gestureIsActive = false;
+  let   cloudAlpha     = 0;
+  let   cloudSpeed     = 0;
+  let   smoothSphScale = 1;
 
-  const diskParts = [];
-  const MAX_PARTS = 300;
+  const FOCAL = 500;
 
-  // Мгновенный спавн кольца покоящихся частиц при первой активации жеста
-  function spawnIdleRing(ex, ey, displayR) {
-    diskParts.length = 0;
-    const count = 90;
-    for (let i = 0; i < count; i++) {
-      const a    = (i / count) * Math.PI * 2 + Math.random() * 0.18;
-      const frac = 0.50 + Math.random() * 0.48;
-      const r    = Math.min(displayR * frac, displayR * 1.25);
-      const tang = a + diskDir * Math.PI / 2;
-      const spd  = 0.25 + Math.random() * 0.7;
-      diskParts.push({
-        x: ex + Math.cos(a) * r,
-        y: ey + Math.sin(a) * r,
-        vx: Math.cos(tang) * spd,
-        vy: Math.sin(tang) * spd,
-        life: 1,
-        maxLife: 110 + Math.random() * 90,  // живут дольше — инерция покоя
-        sz: 1.4 + Math.random() * 2,
-        hue: 185 + Math.random() * 55,
-        t: 0.72,
+  function spawnCloudBurst(cx, cy) {
+    cloudParts.length = 0;
+    for (let i = 0; i < 350; i++) {
+      const theta = Math.acos(2 * Math.random() - 1);
+      const phi   = Math.random() * Math.PI * 2;
+      const r     = 20 + Math.random() * 280;
+      cloudParts.push({
+        ox: Math.sin(theta) * Math.cos(phi) * r,
+        oy: Math.cos(theta) * r,
+        oz: Math.sin(theta) * Math.sin(phi) * r,
+        sz: 2.8 + Math.random() * 3.5,
+        psx: null, psy: null,
       });
     }
   }
 
-  // Offscreen canvas для диска — пересоздаётся только при смене размера/яркости
-  const glowCanvas = document.createElement('canvas');
-  const glowCtx    = glowCanvas.getContext('2d');
-  let   glowCachedR = -1, glowCachedB = -1;
-
-  function rebuildGlowCache(displayR) {
-    const sz = Math.ceil(displayR * 2.5);
-    if (glowCanvas.width !== sz) { glowCanvas.width = glowCanvas.height = sz; }
-    const gc = glowCtx, c = sz / 2;
-    gc.clearRect(0, 0, sz, sz);
-
-    const outer = gc.createRadialGradient(c, c, 0, c, c, c);
-    outer.addColorStop(0,   `rgba(60,140,255,${diskBright * 0.20})`);
-    outer.addColorStop(0.5, `rgba(40,100,255,${diskBright * 0.08})`);
-    outer.addColorStop(1,   'rgba(0,0,0,0)');
-    gc.fillStyle = outer;
-    gc.fillRect(0, 0, sz, sz);
-
-    const core = gc.createRadialGradient(c, c, 0, c, c, displayR * 0.9);
-    core.addColorStop(0,    `rgba(150,225,255,${0.50 * diskBright})`);
-    core.addColorStop(0.35, `rgba(90,180,255,${0.28 * diskBright})`);
-    core.addColorStop(0.70, `rgba(50,120,255,${0.08 * diskBright})`);
-    core.addColorStop(1,    'rgba(0,0,0,0)');
-    gc.fillStyle = core;
-    gc.fillRect(0, 0, sz, sz);
-
-    glowCachedR = displayR;
-    glowCachedB = diskBright;
-  }
-
-  function renderDiskShape(ex, ey, displayR) {
-    if (displayR < 10 || diskBright < 0.015) return;
-
-    // перестраиваем кэш только при заметном изменении
-    if (Math.abs(diskBright - glowCachedB) > 0.04 || Math.abs(displayR - glowCachedR) > 6) {
-      rebuildGlowCache(displayR);
+  // Определение жеста и обновление состояния облака — работает всегда, скелет не нужен
+  function processGesture(lms) {
+    let angle11 = null, angle12 = null;
+    if (lv(lms,12) >= VIS_MIN && lv(lms,14) >= VIS_MIN) {
+      const dx = lx(lms,14)-lx(lms,12), dy = ly(lms,14)-ly(lms,12);
+      angle12 = Math.atan2(dy, dx) * 180 / Math.PI;
     }
-    const half = glowCanvas.width / 2;
-    ctx.globalAlpha = 1;
-    ctx.drawImage(glowCanvas, ex - half, ey - half);
+    if (lv(lms,11) >= VIS_MIN && lv(lms,13) >= VIS_MIN) {
+      const dx = lx(lms,13)-lx(lms,11), dy = ly(lms,13)-ly(lms,11);
+      angle11 = Math.atan2(dy, dx) * 180 / Math.PI;
+    }
+    gestureIsActive =
+      angle11 !== null && angle12 !== null &&
+      Math.abs(angle11 - 90) <= 20 &&
+      Math.abs(angle12)      <= 20;
 
-    // источник света на локте — одна дешёвая радиальная заливка, без shadowBlur
-    const srcR = 12 + diskBright * 44;
-    const src  = ctx.createRadialGradient(ex, ey, 0, ex, ey, srcR);
-    src.addColorStop(0,    `rgba(255,255,255,${0.95 * diskBright})`);
-    src.addColorStop(0.2,  `rgba(190,235,255,${0.75 * diskBright})`);
-    src.addColorStop(0.55, `rgba(90,170,255,${0.35 * diskBright})`);
-    src.addColorStop(1,    'rgba(0,0,0,0)');
-    ctx.fillStyle = src;
-    ctx.beginPath();
-    ctx.arc(ex, ey, srcR, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Жест: правый локоть отведён в сторону
-  function elbowDiskGesture(lms) {
-    const vs = lv(lms, 12), ve = lv(lms, 14), vw = lv(lms, 16);
-    if (vs < 0.4 || ve < 0.4 || vw < 0.4) return null;
-    const sx = lx(lms, 12), sy = ly(lms, 12);
-    const ex = lx(lms, 14), ey = ly(lms, 14);
-    const dx = ex - sx, dy = Math.abs(ey - sy);
-    const shoulderW = Math.abs(lx(lms, 11) - lx(lms, 12));
-    if (dx < shoulderW * 0.7) return null;
-    if (dy > dx * 0.55)       return null;
-    return { ex, ey, wx: lx(lms, 16), wy: ly(lms, 16) };
-  }
-
-  function spawnDiskParticles(ex, ey, displayR) {
-    if (diskParts.length >= MAX_PARTS) return;
-    const t     = Math.min(diskAngVel / 0.09, 1);
-    // больше частиц при ускорении, минимум 3 в покое
-    const count = Math.min(3 + Math.floor(t * t * 18), MAX_PARTS - diskParts.length);
-    const maxR  = displayR * 1.3;
-    for (let i = 0; i < count; i++) {
-      const frac    = t > 0.4 ? 0.55 + Math.random() * 0.55 : 0.35 + Math.random() * 0.65;
-      const a       = Math.random() * Math.PI * 2;
-      const r       = Math.min(displayR * frac, maxR);
-      const tang    = a + diskDir * Math.PI / 2;
-      const tangSpd = diskAngVel * 340 * frac;
-      diskParts.push({
-        x: ex + Math.cos(a) * r,
-        y: ey + Math.sin(a) * r,
-        vx: Math.cos(tang) * tangSpd,
-        vy: Math.sin(tang) * tangSpd,
-        life: 1,
-        maxLife: 30 + t * 100,   // на высокой скорости живут дольше
-        sz: 1.2 + t * 2.2,
-        hue: 185 + Math.random() * 55,
-        t,
-      });
+    if (gestureIsActive && lv(lms,14) >= VIS_MIN) {
+      const ex = lx(lms,14), ey = ly(lms,14);
+      cloudCx = ex; cloudCy = ey;
+      if (!cloudWasActive) { spawnCloudBurst(ex, ey); cloudWasActive = true; }
+      if (lv(lms,16) >= VIS_MIN) {
+        const wa = Math.atan2(ly(lms,16)-ey, lx(lms,16)-ex);
+        if (wristLastAngle !== null) {
+          let delta = wa - wristLastAngle;
+          if (delta >  Math.PI) delta -= 2 * Math.PI;
+          if (delta < -Math.PI) delta += 2 * Math.PI;
+          cloudAngVel = cloudAngVel * 0.92 + delta * 0.08;
+        }
+        wristLastAngle = wa;
+      }
+    } else {
+      cloudWasActive = false;
+      wristLastAngle = null;
+      cloudAngVel   *= 0.97; // медленный распад — 2 сек инерции
     }
   }
 
-  function updateDiskParticles() {
-    if (diskParts.length === 0) return;
-    const maxR = diskBaseR * diskScale * 1.3;
-    const cx = diskEx, cy = diskEy;
+  function drawGestureLight() {
+    if (cloudAlpha < 0.01) return;
+    const t   = Math.min(cloudSpeed / 0.06, 1);
+    const hue = Math.round(200 - t * 170);
+    const ex  = cloudCx, ey = cloudCy;
+    ctx.save();
+    ctx.globalAlpha = cloudAlpha;
+    const glow = ctx.createRadialGradient(ex, ey, 0, ex, ey, 320);
+    glow.addColorStop(0,   `hsla(${hue},80%,70%,0.50)`);
+    glow.addColorStop(0.3, `hsla(${hue},70%,50%,0.18)`);
+    glow.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(ex, ey, 320, 0, Math.PI*2); ctx.fill();
+    const core = ctx.createRadialGradient(ex, ey, 0, ex, ey, 80);
+    core.addColorStop(0,   `hsla(${hue},40%,97%,1.0)`);
+    core.addColorStop(0.2, `hsla(${hue},60%,82%,0.90)`);
+    core.addColorStop(0.5, `hsla(${hue},70%,60%,0.45)`);
+    core.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(ex, ey, 80, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function updateCloudParticles() {
+    cloudSpeed      = cloudSpeed * 0.94 + Math.abs(cloudAngVel) * 0.06;
+    // держим alpha пока есть скорость — частицы вращаются по инерции ещё ~2 сек
+    const spinAlive = gestureIsActive || cloudSpeed > 0.004;
+    cloudAlpha     += ((spinAlive ? 1 : 0) - cloudAlpha) * (spinAlive ? 0.08 : 0.012);
+    const t         = Math.min(cloudSpeed / 0.06, 1);
+    smoothSphScale += ((1 + t * 0.8) - smoothSphScale) * 0.04; // плавный масштаб
+
+    if (cloudParts.length === 0 || cloudAlpha < 0.01) return;
+
+    const hue   = Math.round(200 - t * 170);
+    const bright = Math.round(82 + t * 14);
+    const sat    = Math.round(t * 80);
+    const cosA   = Math.cos(cloudAngVel);
+    const sinA   = Math.sin(cloudAngVel);
+    const ss     = smoothSphScale;
+
+    // вычисляем позиции и вращаем
+    const sx = new Float32Array(cloudParts.length);
+    const sy = new Float32Array(cloudParts.length);
+    for (let i = 0; i < cloudParts.length; i++) {
+      const p  = cloudParts[i];
+      const nx = p.ox * cosA - p.oz * sinA;
+      const nz = p.ox * sinA + p.oz * cosA;
+      p.ox = nx; p.oz = nz;
+      const sc = FOCAL / (FOCAL + p.oz * ss);
+      sx[i] = sc > 0 ? cloudCx + p.ox * ss * sc : -9999;
+      sy[i] = cloudCy + p.oy * ss * sc;
+    }
 
     ctx.save();
-    ctx.lineCap = 'round';
-    // shadowBlur убран полностью — главный источник лагов
 
-    for (let i = diskParts.length - 1; i >= 0; i--) {
-      const p = diskParts[i];
-      p.x  += p.vx; p.y += p.vy;
-      p.vx *= 0.96; p.vy *= 0.96;  // инерция: частицы дольше сохраняют импульс
-      p.life -= 1 / p.maxLife;
-
-      if (p.life <= 0 || Math.hypot(p.x - cx, p.y - cy) > maxR) {
-        diskParts.splice(i, 1);
-        continue;
+    // шлейф — одна батч-линия при t > 0.3
+    if (t > 0.3) {
+      ctx.strokeStyle = `hsl(${hue},${sat}%,${bright}%)`;
+      ctx.globalAlpha = cloudAlpha * t * 0.22;
+      ctx.lineWidth   = 0.7;
+      ctx.beginPath();
+      for (let i = 0; i < cloudParts.length; i++) {
+        const p = cloudParts[i];
+        if (sx[i] < -1000 || p.psx === null) continue;
+        ctx.moveTo(p.psx, p.psy);
+        ctx.lineTo(sx[i], sy[i]);
       }
+      ctx.stroke();
+    }
 
-      const spd  = Math.hypot(p.vx, p.vy);
-      const dist = Math.hypot(p.x - cx, p.y - cy);
+    // точки
+    ctx.fillStyle   = `hsl(${hue},${sat}%,${bright}%)`;
+    ctx.globalAlpha = cloudAlpha * (0.78 + t * 0.22);
+    for (let i = 0; i < cloudParts.length; i++) {
+      if (sx[i] < -1000) continue;
+      const p  = cloudParts[i];
+      const sc = FOCAL / (FOCAL + p.oz * ss);
+      const sr = Math.max(p.sz * sc, 0.8);
+      ctx.fillRect(sx[i] - sr, sy[i] - sr, sr * 2, sr * 2);
+      p.psx = sx[i]; p.psy = sy[i];
+    }
 
-      if (dist > 2 && spd > 0.06) {
-        const curA    = Math.atan2(p.y - cy, p.x - cx);
-        const angSpan = Math.min((spd / dist) * 6 * p.life, Math.PI * 0.65);
-        const startA  = curA - diskDir * angSpan;
-        const ccw     = diskDir < 0;
+    ctx.restore();
+  }
 
-        // хвост — dim, один arc
-        ctx.globalAlpha = p.life * p.life * (0.12 + p.t * 0.18);
-        ctx.lineWidth   = p.sz * p.life * 0.5 + 0.3;
-        ctx.strokeStyle = `hsl(${p.hue},90%,70%)`;
-        ctx.beginPath();
-        ctx.arc(cx, cy, dist, startA, startA + diskDir * angSpan * 0.6, ccw);
-        ctx.stroke();
+  // ── Красный диск (жест: левая рука вверх + кулак) ───────────────────────
+  let redDiskActive    = false;
+  let redDiskWasActive = false;
+  let redDiskX = 0, redDiskY = 0, redDiskR = 80;
+  let redDiskAngle = 0;
+  let redDiskAlpha = 0;
+  const redDiskParts = [];
 
-        // голова — яркая
-        ctx.globalAlpha = p.life * p.life * (0.55 + p.t * 0.45);
-        ctx.lineWidth   = p.sz * p.life + 0.5;
-        ctx.strokeStyle = `hsl(${p.hue},100%,${88 + p.t * 10}%)`;
-        ctx.beginPath();
-        ctx.arc(cx, cy, dist, startA + diskDir * angSpan * 0.6, curA, ccw);
-        ctx.stroke();
-      } else {
-        ctx.globalAlpha = p.life * p.life * (0.4 + p.t * 0.5);
-        ctx.fillStyle   = `hsl(${p.hue},100%,88%)`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.sz * p.life + 0.4, 0, Math.PI * 2);
-        ctx.fill();
-      }
+  function spawnRedDisk(cx, cy, r) {
+    redDiskParts.length = 0;
+    for (let i = 0; i < 140; i++) {
+      const frac = 0.25 + Math.random() * 0.85;
+      redDiskParts.push({
+        a:   Math.random() * Math.PI * 2,
+        r:   r * frac,
+        spd: (0.018 + Math.random() * 0.02) * (Math.random() < 0.5 ? 1 : -1),
+        sz:  1.2 + Math.random() * 2.5,
+      });
+    }
+  }
+
+  function processGesture2(lms) {
+    let angle11 = null, angle12 = null;
+    if (lv(lms,12) >= VIS_MIN && lv(lms,14) >= VIS_MIN) {
+      angle12 = Math.atan2(ly(lms,14)-ly(lms,12), lx(lms,14)-lx(lms,12)) * 180/Math.PI;
+    }
+    if (lv(lms,11) >= VIS_MIN && lv(lms,13) >= VIS_MIN) {
+      angle11 = Math.atan2(ly(lms,13)-ly(lms,11), lx(lms,13)-lx(lms,11)) * 180/Math.PI;
+    }
+    const poseOk = angle11 !== null && angle12 !== null &&
+      Math.abs(angle11 - (-140)) <= 20 &&
+      Math.abs(angle12 - 90)    <= 20;
+
+    if (!poseOk || lv(lms,15) < VIS_MIN || lv(lms,13) < VIS_MIN) {
+      redDiskActive = false; redDiskWasActive = false; return;
+    }
+
+    // кулак: указательный (19) близко к запястью (15) относительно предплечья
+    const forearmLen = Math.hypot(lx(lms,15)-lx(lms,13), ly(lms,15)-ly(lms,13));
+    const indexDist  = lv(lms,19) >= VIS_MIN
+      ? Math.hypot(lx(lms,19)-lx(lms,15), ly(lms,19)-ly(lms,15)) : forearmLen;
+    const isFist     = forearmLen > 10 && indexDist < forearmLen * 0.55;
+
+    redDiskActive = isFist;
+    if (redDiskActive) {
+      redDiskX = lx(lms,15); redDiskY = ly(lms,15);
+      redDiskR = Math.max(forearmLen * 0.75, 30);
+      if (!redDiskWasActive) { spawnRedDisk(redDiskX, redDiskY, redDiskR); redDiskWasActive = true; }
+    } else {
+      redDiskWasActive = false;
+    }
+  }
+
+  function drawRedDisk() {
+    redDiskAlpha += ((redDiskActive ? 1 : 0) - redDiskAlpha) * (redDiskActive ? 0.1 : 0.02);
+    if (redDiskAlpha < 0.01 || redDiskParts.length === 0) return;
+
+    const cx = redDiskX, cy = redDiskY;
+    ctx.save();
+
+    // широкое рассеивание
+    ctx.globalAlpha = redDiskAlpha * 0.85;
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, redDiskR * 2.2);
+    glow.addColorStop(0,    'rgba(255,80,10,0.55)');
+    glow.addColorStop(0.3,  'rgba(200,25,0,0.20)');
+    glow.addColorStop(0.7,  'rgba(120,5,0,0.07)');
+    glow.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(cx, cy, redDiskR * 2.2, 0, Math.PI*2); ctx.fill();
+
+    // яркое ядро
+    ctx.globalAlpha = redDiskAlpha;
+    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, redDiskR * 0.45);
+    core.addColorStop(0,    'rgba(255,210,160,1.0)');
+    core.addColorStop(0.25, 'rgba(255,80,20,0.90)');
+    core.addColorStop(1,    'rgba(160,5,0,0)');
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(cx, cy, redDiskR * 0.45, 0, Math.PI*2); ctx.fill();
+
+    // вращающиеся частицы
+    ctx.globalAlpha = redDiskAlpha * 0.92;
+    ctx.fillStyle   = '#ff4411';
+    for (const p of redDiskParts) {
+      p.a += p.spd;
+      const x = cx + Math.cos(p.a) * p.r;
+      const y = cy + Math.sin(p.a) * p.r;
+      ctx.fillRect(x - p.sz, y - p.sz, p.sz * 2, p.sz * 2);
     }
     ctx.restore();
   }
 
-  function tickDisk() {
-    diskAngVel *= 0.975; // медленнее гаснет — инерция диска
-    const t = Math.min(diskAngVel / 0.09, 1);
-    diskScale  += (1 + t * 2.6 - diskScale) * 0.05;
-    diskBright += (t - diskBright)           * 0.05;
-    if (diskAngVel < 0.0003) return;
-    diskAngle += diskAngVel * diskDir;
-    const displayR = diskBaseR * diskScale;
-    if (diskAngVel > 0.004 && diskBaseR > 0) spawnDiskParticles(diskEx, diskEy, displayR);
-    renderDiskShape(diskEx, diskEy, displayR);
+  // Режим 1 — плотные точки с цветовой системой
+  const BODY_DOTS = [
+    { i: 0,  r: 16 },
+    { i: 11, r: 18 }, { i: 12, r: 18 },
+    { i: 13, r: 14 }, { i: 14, r: 14 },
+    { i: 15, r: 11 }, { i: 16, r: 11 },
+    { i: 23, r: 16 }, { i: 24, r: 16 },
+  ];
+
+  // Случайные соединения между точками тела (генерируются один раз)
+  const bodyConns = [];
+  // Скорость тела и смещение спектра
+  const prevLandmarkPos = {};
+  let   bodyMoveSpeed = 0;
+  let   bodyHueOffset = 0;
+
+  function initBodyConns() {
+    bodyConns.length = 0;
+    const n = BODY_DOTS.length;
+    const used = new Set();
+    let attempts = 0;
+    while (bodyConns.length < 18 && attempts < 200) {
+      attempts++;
+      const a = Math.floor(Math.random() * n);
+      const b = Math.floor(Math.random() * n);
+      if (a === b) continue;
+      const key = `${Math.min(a,b)}-${Math.max(a,b)}`;
+      if (used.has(key)) continue;
+      used.add(key);
+      bodyConns.push({ a, b, key });
+    }
   }
 
-  function drawDisk(g) {
-    const { ex, ey, wx, wy } = g;
-    const baseR = Math.hypot(wx - ex, wy - ey);
-    if (baseR < 20) return;
+  // Суставы для дуг угла: { hinge, from, to }
+  const ANGLE_JOINTS = [
+    { hinge: 13, from: 11, to: 15 }, // левый локоть
+    { hinge: 14, from: 12, to: 16 }, // правый локоть
+    { hinge: 11, from: 13, to: 23 }, // левое плечо
+    { hinge: 12, from: 14, to: 24 }, // правое плечо
+  ];
 
-    diskEx = ex; diskEy = ey; diskBaseR = baseR;
+  // 9 каналов цвета фона (левый, правый, тело)
+  const bcs = { lR:0,lG:0,lB:0, rR:0,rG:0,rB:0, bR:0,bG:0,bB:0 };
 
-    // первый кадр жеста — мгновенный свет и кольцо частиц
-    if (!diskWasActive) {
-      diskBright = 0.55;
-      diskScale  = 1;
-      spawnIdleRing(ex, ey, baseR);
+  function initAudio() {
+    if (beatAnalyser) return;
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then(stream => {
+        const ac = new AudioContext();
+        beatAnalyser = ac.createAnalyser();
+        beatAnalyser.fftSize = 512;
+        beatAnalyser.smoothingTimeConstant = 0;
+        ac.createMediaStreamSource(stream).connect(beatAnalyser);
+        beatTimeBuf = new Uint8Array(beatAnalyser.fftSize);
+      }).catch(() => {});
+  }
+
+  function measureBeat() {
+    if (!beatAnalyser) return 0;
+    beatAnalyser.getByteTimeDomainData(beatTimeBuf);
+    let sum = 0;
+    for (let i = 0; i < beatTimeBuf.length; i++) {
+      const v = (beatTimeBuf[i] - 128) / 128;
+      sum += v * v;
     }
-    diskWasActive = true;
+    const rms = Math.sqrt(sum / beatTimeBuf.length);
+    const spike = Math.max(0, rms - beatEnv * 2.2);
+    beatEnv += rms > beatEnv ? (rms - beatEnv) * 0.8 : (rms - beatEnv) * 0.05;
+    return spike;
+  }
 
-    const armAngle = Math.atan2(wy - ey, wx - ex);
-    let delta = 0;
-    if (lastArmAngle !== null) {
-      delta = armAngle - lastArmAngle;
-      if (delta >  Math.PI) delta -= 2 * Math.PI;
-      if (delta < -Math.PI) delta += 2 * Math.PI;
+  function drawSilhouette(mask) {
+    if (!mask) return;
+    const a = 0.10 + silFlash * 0.90;
+    if (a < 0.02) return;
+    silCv.width  = canvas.width;
+    silCv.height = canvas.height;
+    maskCtx.clearRect(0, 0, silCv.width, silCv.height);
+    // спокойный синеватый → ярко-белый при ударе
+    const cr = Math.round(130 + silFlash * 125);
+    const cg = Math.round(160 + silFlash * 95);
+    maskCtx.fillStyle = `rgba(${cr},${cg},255,${a.toFixed(2)})`;
+    maskCtx.fillRect(0, 0, silCv.width, silCv.height);
+    // вырезаем силуэт маской (зеркалим под экран)
+    maskCtx.globalCompositeOperation = 'destination-in';
+    maskCtx.save();
+    maskCtx.translate(silCv.width, 0); maskCtx.scale(-1, 1);
+    maskCtx.drawImage(mask, 0, 0, silCv.width, silCv.height);
+    maskCtx.restore();
+    maskCtx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(silCv, 0, 0);
+  }
+
+  function drawBodyMode(lms) {
+    const vis = i => lv(lms,i) >= VIS_MIN;
+    const bodyCx = vis(11)&&vis(12) ? (lx(lms,11)+lx(lms,12))/2 : canvas.width/2;
+    const ref = vis(11)&&vis(12) ? Math.max(Math.hypot(lx(lms,12)-lx(lms,11), ly(lms,12)-ly(lms,11)), 1) : 150;
+    const nd = (a,b) => vis(a)&&vis(b) ? Math.sqrt(Math.min(Math.hypot(lx(lms,a)-lx(lms,b), ly(lms,a)-ly(lms,b))/(ref*1.6), 1)) : 0;
+    const nh = i => {
+      if (!vis(i)||!vis(11)||!vis(12)) return 0;
+      return Math.sqrt(Math.min(Math.max(0, ((ly(lms,11)+ly(lms,12))/2-ly(lms,i))/(ref*1.2)), 1));
+    };
+
+    // Скорость тела — среднее смещение ключевых точек за кадр
+    let totalSpd = 0, spCount = 0;
+    for (const idx of [11,12,13,14,15,16]) {
+      if (!vis(idx)) continue;
+      const cx = lx(lms,idx), cy = ly(lms,idx);
+      if (prevLandmarkPos[idx])
+        totalSpd += Math.hypot(cx-prevLandmarkPos[idx].x, cy-prevLandmarkPos[idx].y);
+      prevLandmarkPos[idx] = { x: cx, y: cy };
+      spCount++;
     }
-    lastArmAngle = armAngle;
+    if (spCount) bodyMoveSpeed = bodyMoveSpeed*0.75 + (totalSpd/spCount)*0.25;
 
-    if (Math.abs(delta) > 0.001) diskDir = Math.sign(delta);
+    const dynA = Math.min(0.005 + bodyMoveSpeed * 0.003, 0.06);
+    bodyHueOffset = (bodyHueOffset + bodyMoveSpeed * 0.8) % 360;
 
-    // тяжёлая инерция: скорость медленно набирается и медленно гасится
-    diskAngVel  = diskAngVel * 0.90 + Math.abs(delta) * 0.10;
-    diskAngle  += diskAngVel * diskDir;
+    // Правая рука (12→16) управляет ЛЕВЫМ фоном, левая (11→15) — ПРАВЫМ
+    const tLR = nd(12,16); const tLG = nh(16);    const tLB = nd(14,24);
+    const tRR = nd(11,15); const tRG = nh(15);    const tRB = nd(13,23);
+    const tBR = nd(15,16); const tBG = nd(11,24); const tBB = nd(23,24);
 
-    const t    = Math.min(diskAngVel / 0.09, 1);
-    diskScale  += (1 + t * 2.6 - diskScale) * 0.06;
-    diskBright += (t - diskBright)           * 0.06;
+    bcs.lR += (tLR-bcs.lR)*dynA; bcs.lG += (tLG-bcs.lG)*dynA; bcs.lB += (tLB-bcs.lB)*dynA;
+    bcs.rR += (tRR-bcs.rR)*dynA; bcs.rG += (tRG-bcs.rG)*dynA; bcs.rB += (tRB-bcs.rB)*dynA;
+    bcs.bR += (tBR-bcs.bR)*dynA; bcs.bG += (tBG-bcs.bG)*dynA; bcs.bB += (tBB-bcs.bB)*dynA;
 
-    const displayR = baseR * diskScale;
-    if (diskAngVel > 0.002) spawnDiskParticles(ex, ey, displayR);
-    renderDiskShape(ex, ey, displayR);
+    // Расстояние → позиция на цветовом круге (0=рука согнута, 1=вытянута, полный оборот)
+    const lHue = (bcs.lR * 360 + bodyHueOffset) % 360;
+    const rHue = (bcs.rR * 360 + bodyHueOffset + 120) % 360;
+    const bHue = (bcs.bR * 360 + bodyHueOffset + 240) % 360;
+    const lSat = 90, lLit = Math.round(38 + bcs.lG * 22);
+    const rSat = 90, rLit = Math.round(38 + bcs.rG * 22);
+    const bSat = 90, bLit = Math.round(42 + bcs.bG * 20);
+
+    // Рисуем цвет на отдельный холст с CSS mix-blend-mode:difference → негатив поверх камеры
+    const la = (0.12 + bcs.lR * 0.88).toFixed(2);
+    const ra = (0.12 + bcs.rR * 0.88).toFixed(2);
+    overlayCtx.save();
+    const leftGrad = overlayCtx.createLinearGradient(bodyCx, 0, 0, 0);
+    leftGrad.addColorStop(0,    `hsla(${lHue},92%,55%,0)`);
+    leftGrad.addColorStop(0.3,  `hsla(${lHue},92%,55%,${(la*0.55).toFixed(2)})`);
+    leftGrad.addColorStop(1,    `hsla(${lHue},92%,55%,${la})`);
+    overlayCtx.fillStyle = leftGrad;
+    overlayCtx.fillRect(0, 0, bodyCx, overlayCanvas.height);
+
+    const rightGrad = overlayCtx.createLinearGradient(bodyCx, 0, overlayCanvas.width, 0);
+    rightGrad.addColorStop(0,   `hsla(${rHue},92%,55%,0)`);
+    rightGrad.addColorStop(0.3, `hsla(${rHue},92%,55%,${(ra*0.55).toFixed(2)})`);
+    rightGrad.addColorStop(1,   `hsla(${rHue},92%,55%,${ra})`);
+    overlayCtx.fillStyle = rightGrad;
+    overlayCtx.fillRect(bodyCx, 0, overlayCanvas.width - bodyCx, overlayCanvas.height);
+    overlayCtx.restore();
+
+    // Ленивая инициализация случайных соединений
+    if (bodyConns.length === 0) initBodyConns();
+
+    // Соединения между точками + дистанции
+    ctx.save();
+    ctx.lineCap     = 'round';
+    ctx.lineWidth   = 1.4;
+    ctx.font        = 'bold 10px monospace';
+    ctx.textAlign   = 'center';
+
+    for (const { a, b } of bodyConns) {
+      const da = BODY_DOTS[a], db = BODY_DOTS[b];
+      if (!vis(da.i) || !vis(db.i)) continue;
+      const ax = lx(lms,da.i), ay = ly(lms,da.i);
+      const bx = lx(lms,db.i), by = ly(lms,db.i);
+      const dist = Math.round(Math.hypot(bx-ax, by-ay));
+      const lineHue = (bodyHueOffset + dist * 0.4) % 360;
+
+      // линия — цвет из спектра, привязанный к длине
+      ctx.globalAlpha = 0.72;
+      ctx.strokeStyle = `hsl(${lineHue},90%,72%)`;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+
+      // значение дистанции
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle   = `hsl(${lineHue},85%,88%)`;
+      ctx.fillText(dist, (ax+bx)/2, (ay+by)/2 - 5);
+    }
+    ctx.restore();
+
+    // Дуги углов на суставах
+    ctx.save();
+    ctx.font      = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    for (const { hinge, from, to } of ANGLE_JOINTS) {
+      if (!vis(hinge) || !vis(from) || !vis(to)) continue;
+      const hx = lx(lms,hinge), hy = ly(lms,hinge);
+      const a1 = Math.atan2(ly(lms,from)-hy, lx(lms,from)-hx);
+      const a2 = Math.atan2(ly(lms,to)  -hy, lx(lms,to)  -hx);
+      let sweep = a2 - a1;
+      if (sweep >  Math.PI) sweep -= 2*Math.PI;
+      if (sweep < -Math.PI) sweep += 2*Math.PI;
+      const deg = Math.abs(Math.round(sweep * 180 / Math.PI));
+      const arcR = 20;
+      ctx.globalAlpha  = 0.7;
+      ctx.strokeStyle  = '#00ffcc';
+      ctx.lineWidth    = 1.2;
+      ctx.beginPath();
+      ctx.arc(hx, hy, arcR, a1, a1 + sweep, sweep < 0);
+      ctx.stroke();
+      const midA = a1 + sweep * 0.5;
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle   = '#00ffcc';
+      ctx.fillText(deg + '°', hx + Math.cos(midA)*(arcR+13), hy + Math.sin(midA)*(arcR+13));
+    }
+    ctx.restore();
+
+    // Тело — точки со своим независимым HSL-цветом
+    ctx.save();
+    for (const { i, r } of BODY_DOTS) {
+      const v = lv(lms,i);
+      if (v < VIS_MIN) continue;
+      const x = lx(lms,i), y = ly(lms,i);
+      const dotHue = (bHue + i * 14) % 360;
+      ctx.globalAlpha = v;
+      ctx.fillStyle = `hsl(${dotHue},${bSat}%,${bLit+20}%)`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+      const g = ctx.createRadialGradient(x, y, r*0.4, x, y, r*4);
+      g.addColorStop(0, `hsla(${dotHue},${bSat}%,${bLit+20}%,${0.55*v})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r*4, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+
+  }
+
+  // ── Волна частиц (правая рука горизонтально + левая рука вверх) ──────────
+  const waveParts   = [];
+  const WAVE_MAX    = 600;
+  let   waveActive  = false;
+  let   waveHue     = 0;
+  let   waveHandPX  = null, waveHandPY = null;
+  let   waveVX = 0, waveVY = 0;
+
+  function processWaveGesture(lms) {
+    // Правая рука горизонтально: угол shoulder(12)→wrist(16) ≈ 0° ± 30°, рука вытянута
+    if (lv(lms,12) < VIS_MIN || lv(lms,16) < VIS_MIN || lv(lms,15) < VIS_MIN) {
+      waveActive = false; waveHandPX = null; return;
+    }
+    const angleRW = Math.atan2(ly(lms,16)-ly(lms,12), lx(lms,16)-lx(lms,12)) * 180/Math.PI;
+    const armLen  = Math.hypot(lx(lms,16)-lx(lms,12), ly(lms,16)-ly(lms,12));
+    const refW    = Math.abs(lx(lms,11)-lx(lms,12)) || 100;
+    if (Math.abs(angleRW) > 30 || armLen < refW * 0.8) {
+      waveActive = false; waveHandPX = null; return;
+    }
+
+    // Скорость левого запястья
+    const hx = lx(lms,15), hy = ly(lms,15);
+    if (waveHandPX !== null) {
+      waveVX = waveVX * 0.65 + (hx - waveHandPX) * 0.35;
+      waveVY = waveVY * 0.65 + (hy - waveHandPY) * 0.35;
+    }
+    waveHandPX = hx; waveHandPY = hy;
+
+    waveActive = waveVY < -2.5; // левая рука движется вверх
+    if (waveActive) spawnWave(hx, hy);
+  }
+
+  function spawnWave(hx, hy) {
+    const spd = Math.max(-waveVY, 3);
+    for (let i = 0; i < 14 && waveParts.length < WAVE_MAX; i++) {
+      const spread = (Math.random()-0.5) * 55;
+      waveParts.push({
+        x:  hx + spread,
+        y:  hy + (Math.random()-0.5)*25,
+        vx: waveVX*0.4 + spread*0.06,
+        vy: waveVY*0.5 - Math.random()*spd*0.6,
+        life: 1,
+        maxLife: 55 + Math.random()*70,
+        sz: 2.5 + Math.random()*4,
+        hue: waveHue + Math.random()*40,
+      });
+    }
+    waveHue = (waveHue + 3) % 360;
+  }
+
+  function updateWaveParticles() {
+    if (waveParts.length === 0) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (let i = waveParts.length-1; i >= 0; i--) {
+      const p = waveParts[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= 0.985; p.vy *= 0.985; // плавная инерция
+      p.life -= 1/p.maxLife;
+      if (p.life <= 0) { waveParts.splice(i,1); continue; }
+      ctx.globalAlpha = p.life * p.life * 0.95;
+      ctx.fillStyle   = `hsl(${p.hue % 360},100%,82%)`;
+      const sr = p.sz * p.life + 0.5;
+      ctx.fillRect(p.x-sr, p.y-sr, sr*2, sr*2);
+    }
+    ctx.restore();
+  }
+
+  // ── Обе руки вверх → белый свет + лучи ────────────────────────────────────
+  let bothHandsUp       = false;
+  let bothHandsStrength = 0;
+  const RAYS = [];
+
+  function ensureRays() {
+    if (RAYS.length > 0) return;
+    for (let i = 0; i < 24; i++) {
+      RAYS.push({
+        x:   Math.random() * canvas.width,
+        y:   Math.random() * canvas.height * 2,
+        w:   8  + Math.random() * 55,
+        spd: 4  + Math.random() * 9,
+        a:   0.18 + Math.random() * 0.62,
+      });
+    }
+  }
+
+  function processBothHandsUp(lms) {
+    if (lv(lms,15) < VIS_MIN || lv(lms,16) < VIS_MIN ||
+        lv(lms,11) < VIS_MIN || lv(lms,12) < VIS_MIN) {
+      bothHandsUp = false; return;
+    }
+    bothHandsUp = ly(lms,15) < ly(lms,11) && ly(lms,16) < ly(lms,12);
+  }
+
+  function drawBothHandsEffect() {
+    bothHandsStrength += ((bothHandsUp ? 1 : 0) - bothHandsStrength)
+                       * (bothHandsUp ? 0.045 : 0.028);
+    if (bothHandsStrength < 0.005) return;
+
+    ensureRays();
+    const s = bothHandsStrength;
+    ctx.save();
+
+    // Белое свечение — нарастает квадратично для драматичного эффекта
+    ctx.globalAlpha = s * s * 0.75;
+    ctx.fillStyle   = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Лучи — тонкие вертикальные прямоугольники, летят снизу вверх
+    ctx.fillStyle = '#ffffff';
+    for (const r of RAYS) {
+      r.y -= r.spd * (0.4 + s * 1.4);
+      if (r.y < -canvas.height * 0.8) {
+        r.y = canvas.height + 50 + Math.random() * 250;
+        r.x = Math.random() * canvas.width;
+      }
+      const rayH = canvas.height * (0.38 + (r.w / 63) * 0.28);
+      // вертикальный градиент луча: прозрачный снизу → яркий → прозрачный сверху
+      const grad = ctx.createLinearGradient(0, r.y, 0, r.y - rayH);
+      grad.addColorStop(0,    'rgba(255,255,255,0)');
+      grad.addColorStop(0.25, `rgba(255,255,255,${r.a * s})`);
+      grad.addColorStop(0.75, `rgba(255,255,255,${r.a * s})`);
+      grad.addColorStop(1,    'rgba(255,255,255,0)');
+      ctx.fillStyle   = grad;
+      ctx.globalAlpha = 1;
+      ctx.fillRect(r.x - r.w * 0.5, r.y - rayH, r.w, rayH);
+    }
+
+    ctx.restore();
+  }
+
+  // ── Линии предплечий через весь экран ──────────────────────────────────
+  function drawForearmLines(lms) {
+    const arms = [
+      { e: 13, w: 15, hue: 25  },
+      { e: 14, w: 16, hue: 200 },
+    ];
+    ctx.save();
+    ctx.lineCap = 'butt';
+    for (const { e, w, hue } of arms) {
+      if (lv(lms,e) < VIS_MIN || lv(lms,w) < VIS_MIN) continue;
+      const ex = lx(lms,e), ey = ly(lms,e);
+      const wx = lx(lms,w), wy = ly(lms,w);
+      const dx = wx-ex, dy = wy-ey;
+      const len = Math.hypot(dx,dy);
+      if (len < 10) continue;
+      const nx = dx/len, ny = dy/len;
+      const far = Math.max(canvas.width, canvas.height) * 2;
+      const vis = Math.min(lv(lms,e), lv(lms,w));
+      ctx.strokeStyle = `hsl(${hue},90%,72%)`;
+      ctx.shadowColor = `hsl(${hue},90%,72%)`;
+      ctx.shadowBlur  = 6;
+      // тонкая линия через весь экран
+      ctx.globalAlpha = vis * 0.14;
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(ex - nx*far, ey - ny*far);
+      ctx.lineTo(ex + nx*far, ey + ny*far);
+      ctx.stroke();
+      // само предплечье ярче
+      ctx.globalAlpha = vis * 0.55;
+      ctx.lineWidth   = 1.8;
+      ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(wx,wy); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Парящий 3D куб ──────────────────────────────────────────────────────
+  let cubeHalfSize  = 110;
+  let cubeX3d       = -1;   // -1 = не инициализирован
+  let cubeY3d       = 0;
+  let cubeRX        = 0, cubeRY = 0, cubeRZ = 0;
+  const cubeAutoSpd = { x: 0.004, y: 0.009, z: 0.002 };
+  let cubeGrabbed   = false;
+  let cubeGrabStr   = 0;
+  let cubePrevDist  = null;
+  let cubePrevMidX  = null, cubePrevMidY = null;
+  let cubePrevAngle = null;
+
+  const CUBE_EDGES = [
+    [0,1],[1,2],[2,3],[3,0],
+    [4,5],[5,6],[6,7],[7,4],
+    [0,4],[1,5],[2,6],[3,7],
+  ];
+
+  function cubeProject() {
+    const s  = cubeHalfSize;
+    const cxr = Math.cos(cubeRX), sxr = Math.sin(cubeRX);
+    const cyr = Math.cos(cubeRY), syr = Math.sin(cubeRY);
+    const czr = Math.cos(cubeRZ), szr = Math.sin(cubeRZ);
+    const local = [
+      [-s,-s,-s],[s,-s,-s],[s,s,-s],[-s,s,-s],
+      [-s,-s, s],[s,-s, s],[s,s, s],[-s,s, s],
+    ];
+    return local.map(([x,y,z]) => {
+      const y1 = y*cxr - z*sxr, z1 = y*sxr + z*cxr;
+      const x2 = x*cyr + z1*syr, z2 = -x*syr + z1*cyr;
+      const x3 = x2*czr - y1*szr, y3 = x2*szr + y1*czr;
+      const sc = FOCAL / (FOCAL + z2);
+      return [cubeX3d + x3*sc, cubeY3d + y3*sc, sc];
+    });
+  }
+
+  function processCubeGrab(lms) {
+    if (!lms || lv(lms,15) < VIS_MIN || lv(lms,16) < VIS_MIN) {
+      cubeGrabbed = false; cubePrevDist = null; return;
+    }
+    const h1x = lx(lms,15), h1y = ly(lms,15);
+    const h2x = lx(lms,16), h2y = ly(lms,16);
+    const midX = (h1x+h2x)*0.5, midY = (h1y+h2y)*0.5;
+    const dist  = Math.hypot(h2x-h1x, h2y-h1y);
+    const angle = Math.atan2(h2y-h1y, h2x-h1x);
+    const r1 = Math.hypot(h1x-cubeX3d, h1y-cubeY3d);
+    const r2 = Math.hypot(h2x-cubeX3d, h2y-cubeY3d);
+    const inside = r1 < cubeHalfSize*1.5 && r2 < cubeHalfSize*1.5;
+
+    if (!cubeGrabbed && inside) {
+      cubeGrabbed   = true;
+      cubePrevDist  = dist; cubePrevMidX = midX; cubePrevMidY = midY;
+      cubePrevAngle = angle; return;
+    }
+    if (cubeGrabbed) {
+      if (!inside && Math.hypot(midX-cubeX3d, midY-cubeY3d) > cubeHalfSize*4) {
+        cubeGrabbed = false; cubePrevDist = null; return;
+      }
+      if (cubePrevDist && dist > 5)
+        cubeHalfSize = Math.max(40, Math.min(380, cubeHalfSize*(dist/cubePrevDist)));
+      if (cubePrevMidX !== null) { cubeX3d += midX-cubePrevMidX; cubeY3d += midY-cubePrevMidY; }
+      if (cubePrevAngle !== null) {
+        let da = angle - cubePrevAngle;
+        if (da >  Math.PI) da -= 2*Math.PI;
+        if (da < -Math.PI) da += 2*Math.PI;
+        cubeRZ += da;
+        // покачивание по Y от горизонтального движения рук
+        cubeRY += (midX - cubeX3d) * 0.00018;
+        cubeRX += (midY - cubeY3d) * 0.00018;
+      }
+      cubePrevDist  = dist; cubePrevMidX = midX; cubePrevMidY = midY; cubePrevAngle = angle;
+    }
+  }
+
+  function drawCube() {
+    if (cubeX3d < 0) { cubeX3d = canvas.width*0.5; cubeY3d = canvas.height*0.42; }
+    cubeGrabStr += ((cubeGrabbed ? 1 : 0) - cubeGrabStr) * 0.06;
+    if (!cubeGrabbed) { cubeRX += cubeAutoSpd.x; cubeRY += cubeAutoSpd.y; cubeRZ += cubeAutoSpd.z; }
+    const verts  = cubeProject();
+    const hue    = 185 + Math.round(cubeGrabStr * 55);
+    const baseA  = 0.28 + cubeGrabStr * 0.55;
+    ctx.save();
+    ctx.lineCap    = 'round';
+    ctx.lineWidth  = 1 + cubeGrabStr * 2.5;
+    ctx.strokeStyle = `hsl(${hue},85%,75%)`;
+    ctx.shadowColor = `hsl(${hue},100%,70%)`;
+    ctx.shadowBlur  = 6 + cubeGrabStr * 18;
+    for (const [a, b] of CUBE_EDGES) {
+      const [ax, ay, sca] = verts[a];
+      const [bx, by, scb] = verts[b];
+      ctx.globalAlpha = baseA * (sca+scb)*0.5;
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+    }
+    ctx.fillStyle  = `hsl(${hue},100%,92%)`;
+    ctx.shadowBlur = 4 + cubeGrabStr*10;
+    const dotR = 2 + cubeGrabStr*2;
+    for (const [px, py, sc] of verts) {
+      ctx.globalAlpha = (0.45 + cubeGrabStr*0.45) * sc;
+      ctx.beginPath(); ctx.arc(px, py, dotR, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   function onResults(results) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-    updateDiskParticles();
+    // Детектируем хлопок: резкий скачок амплитуды
+    const beat = measureBeat();
+    if (beat > 0.04) silFlash = Math.min(1, silFlash + beat * 10);
+    silFlash *= 0.88;
 
     const lms = results.poseLandmarks;
-    if (!lms) return;
-
-    const g = elbowDiskGesture(lms);
-    if (g) {
-      diskHoldFrames = DISK_HOLD;
-      drawDisk(g);
+    if (lms) {
+      smoothShoulders(lms);
+      processGesture(lms);
+      processGesture2(lms);
+      processWaveGesture(lms);
+      processBothHandsUp(lms);
+      processCubeGrab(lms);
     } else {
-      lastArmAngle = null;
-      diskWasActive = false;
-      if (diskHoldFrames > 0) {
-        // держим диск без угасания — жест мог прерваться на долю секунды
-        diskHoldFrames--;
-        renderDiskShape(diskEx, diskEy, diskBaseR * diskScale);
-      } else {
-        tickDisk();
-      }
+      gestureIsActive  = false;
+      cloudAngVel     *= 0.95;
+      redDiskActive    = false;
+      redDiskWasActive = false;
+      waveActive       = false;
+      waveHandPX       = null;
+      bothHandsUp      = false;
+      cubeGrabbed      = false;
+      cubePrevDist     = null;
     }
 
-    if (skeletonVisible) drawSkeleton(smoothShoulders(lms));
+    drawGestureLight();
+    updateCloudParticles();
+    drawRedDisk();
+    updateWaveParticles();
+    drawCube();
+
+    if (lms) {
+      drawForearmLines(lms);
+      if (renderMode === 0 && skeletonVisible) drawSkeleton(lms);
+      if (renderMode === 1) drawBodyMode(lms);
+      drawSilhouette(results.segmentationMask);
+    }
+
+    // поверх всего — белый свет и лучи
+    drawBothHandsEffect();
   }
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
   pose.setOptions({
     modelComplexity:        1,
     smoothLandmarks:        false, // отключено для нулевой задержки
-    enableSegmentation:     false,
-    smoothSegmentation:     false,
+    enableSegmentation:     true,
+    smoothSegmentation:     true,
     minDetectionConfidence: 0.4, // ниже порог = лучше ловит издалека
     minTrackingConfidence:  0.4,
   });
@@ -526,6 +1094,7 @@
   }).then(stream => {
     video.srcObject = stream;
     video.onloadedmetadata = () => { video.play(); statusEl.textContent = ''; loop(); };
+    initAudio();
   }).catch(() => { statusEl.textContent = 'Нет доступа к камере'; });
 </script>
 </body>
