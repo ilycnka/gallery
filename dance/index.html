@@ -1023,76 +1023,120 @@
     ctx.restore();
   }
 
-  // ── Режим 2: тело покрыто частицами ──────────────────────────────────────
-  const m2Parts = [];
-  const M2_MAX  = 2200;
+  // ── Режим 2: пространство частиц с гравитацией к силуэту ─────────────────
+  const M2_RES = 52;
+  let   m2Parts = null;   // lazy init
   let   m2Hue   = 0;
-  const m2Cv    = document.createElement('canvas');
-  m2Cv.width    = m2Cv.height = 96;
-  const m2SCtx  = m2Cv.getContext('2d', { willReadFrequently: true });
 
-  function m2Spawn(mask, count) {
-    m2SCtx.save();
-    m2SCtx.translate(96, 0); m2SCtx.scale(-1, 1);
-    m2SCtx.drawImage(mask, 0, 0, 96, 96);
-    m2SCtx.restore();
-    const d = m2SCtx.getImageData(0, 0, 96, 96).data;
-    let n = 0, tries = 0;
-    while (n < count && tries < count * 8) {
-      tries++;
-      const px = Math.floor(Math.random() * 96);
-      const py = Math.floor(Math.random() * 96);
-      if (d[(py * 96 + px) * 4] < 110) continue; // фон
-      const wx = (px / 96) * canvas.width;
-      const wy = (py / 96) * canvas.height;
+  const m2Cv   = document.createElement('canvas');
+  m2Cv.width   = m2Cv.height = M2_RES;
+  const m2SCtx = m2Cv.getContext('2d', { willReadFrequently: true });
+  const m2Mask = new Float32Array(M2_RES * M2_RES);
+  let   m2HasBody = false;
+
+  function m2InitParts() {
+    m2Parts = [];
+    for (let i = 0; i < 4000; i++) {
       m2Parts.push({
-        ox: wx, oy: wy,               // позиция на теле
-        t:  Math.random() * Math.PI * 2,
-        spd: 0.018 + Math.random() * 0.028,
-        ax:  3 + Math.random() * 5,   // амплитуда колебания
-        ay:  3 + Math.random() * 5,
-        life: 1,
-        decay: 0.006 + Math.random() * 0.014,
-        sz:   3 + Math.random() * 5.5,
-        hue:  (m2Hue + py * 1.8 + Math.random() * 45) % 360,
+        x:  Math.random() * canvas.width,
+        y:  Math.random() * canvas.height,
+        z:  (Math.random() - 0.5) * 500,
+        vx: (Math.random() - 0.5) * 0.7,
+        vy: (Math.random() - 0.5) * 0.7,
+        vz: (Math.random() - 0.5) * 0.2,
+        hue: Math.random() * 360,
+        sz:  1.4 + Math.random() * 2.4,
       });
-      n++;
     }
-    m2Hue = (m2Hue + 0.9) % 360;
+  }
+
+  function m2ReadMask(mask) {
+    if (!mask) { m2Mask.fill(0); m2HasBody = false; return; }
+    m2SCtx.save();
+    m2SCtx.translate(M2_RES, 0); m2SCtx.scale(-1, 1);
+    m2SCtx.drawImage(mask, 0, 0, M2_RES, M2_RES);
+    m2SCtx.restore();
+    const d = m2SCtx.getImageData(0, 0, M2_RES, M2_RES).data;
+    let sum = 0;
+    for (let i = 0; i < M2_RES * M2_RES; i++) {
+      m2Mask[i] = d[i * 4] / 255;
+      sum += m2Mask[i];
+    }
+    m2HasBody = sum > 60;
+  }
+
+  // O(1) lookup: экранные координаты → значение маски
+  function m2S(x, y) {
+    const mx = Math.max(0, Math.min(M2_RES - 1, (x / canvas.width  * M2_RES) | 0));
+    const my = Math.max(0, Math.min(M2_RES - 1, (y / canvas.height * M2_RES) | 0));
+    return m2Mask[my * M2_RES + mx];
   }
 
   function updateMode2(mask) {
-    // затемняем видео под частицами
-    ctx.save();
-    ctx.globalAlpha = 0.55;
-    ctx.fillStyle   = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
+    if (!m2Parts) m2InitParts();
+    m2ReadMask(mask);
+    m2Hue = (m2Hue + 0.22) % 360;
 
-    if (mask) {
-      const toSpawn = Math.min(80, M2_MAX - m2Parts.length);
-      if (toSpawn > 0) m2Spawn(mask, toSpawn);
-    }
+    // Двухмасштабный градиент — ближний (точность) + дальний (радиус притяжения)
+    const s1x = canvas.width  / M2_RES * 1.5;
+    const s2x = canvas.width  / M2_RES * 4.5;
+    const s1y = canvas.height / M2_RES * 1.5;
+    const s2y = canvas.height / M2_RES * 4.5;
 
     ctx.save();
-    for (let i = m2Parts.length - 1; i >= 0; i--) {
+    for (let i = 0; i < m2Parts.length; i++) {
       const p = m2Parts[i];
-      p.life -= p.decay;
-      if (p.life <= 0) { m2Parts.splice(i, 1); continue; }
-      p.t += p.spd;
-      const x  = p.ox + Math.sin(p.t) * p.ax;
-      const y  = p.oy + Math.cos(p.t * 0.71) * p.ay;
-      const a  = p.life * p.life;
-      const sz = p.sz * (0.4 + p.life * 0.6);
-      // внешнее гало (без shadowBlur — чисто второй прямоугольник)
-      ctx.globalAlpha = a * 0.28;
-      ctx.fillStyle   = `hsl(${p.hue},100%,70%)`;
-      ctx.fillRect(x - sz, y - sz, sz * 2, sz * 2);
-      // яркое ядро
-      ctx.globalAlpha = a * 0.92;
-      ctx.fillStyle   = `hsl(${p.hue},95%,80%)`;
-      const c = sz * 0.42;
-      ctx.fillRect(x - c, y - c, c * 2, c * 2);
+
+      let edgeness = 0;
+      if (m2HasBody) {
+        const mv = m2S(p.x, p.y);
+        const gx = (m2S(p.x+s1x,p.y) - m2S(p.x-s1x,p.y)) * 0.55 +
+                   (m2S(p.x+s2x,p.y) - m2S(p.x-s2x,p.y)) * 0.45;
+        const gy = (m2S(p.x,p.y+s1y) - m2S(p.x,p.y-s1y)) * 0.55 +
+                   (m2S(p.x,p.y+s2y) - m2S(p.x,p.y-s2y)) * 0.45;
+        const gl = Math.hypot(gx, gy) + 0.0001;
+        edgeness = Math.min(gl * 2.5, 1);
+
+        if (mv < 0.5) {
+          // снаружи — гравитация к краю силуэта
+          p.vx += gx / gl * 0.26;
+          p.vy += gy / gl * 0.26;
+        } else {
+          // внутри — выталкиваем обратно к поверхности
+          p.vx -= gx / gl * 0.16;
+          p.vy -= gy / gl * 0.16;
+        }
+      }
+
+      // Броуновское движение + затухание
+      p.vx += (Math.random() - 0.5) * 0.014;
+      p.vy += (Math.random() - 0.5) * 0.014;
+      p.vz += (Math.random() - 0.5) * 0.006;
+      p.vx *= 0.93; p.vy *= 0.93; p.vz *= 0.97;
+      p.x  += p.vx;  p.y  += p.vy;  p.z  += p.vz;
+
+      // Wrap по краям
+      if (p.x < -20)                  p.x = canvas.width  + 20;
+      if (p.x > canvas.width  + 20)   p.x = -20;
+      if (p.y < -20)                  p.y = canvas.height + 20;
+      if (p.y > canvas.height + 20)   p.y = -20;
+      if (p.z < -250) p.z = 250; else if (p.z > 250) p.z = -250;
+
+      // Глубина → размер и яркость
+      const depthN = (p.z + 250) / 500;
+      const sc     = 0.45 + depthN;
+      const sz     = p.sz * sc;
+      const hue    = (p.hue + m2Hue) % 360;
+      const lit    = 50 + edgeness * 34 + depthN * 12 | 0;
+      const alpha  = 0.25 + edgeness * 0.60 + depthN * 0.12;
+
+      // Гало (большой тусклый) + ядро (малый яркий) — имитация свечения без shadowBlur
+      ctx.globalAlpha = alpha * 0.20;
+      ctx.fillStyle   = `hsl(${hue},90%,${lit}%)`;
+      ctx.fillRect(p.x - sz*2, p.y - sz*2, sz*4, sz*4);
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.fillStyle   = `hsl(${hue},80%,${lit+16}%)`;
+      ctx.fillRect(p.x - sz*.5, p.y - sz*.5, sz, sz);
     }
     ctx.restore();
   }
