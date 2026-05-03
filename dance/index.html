@@ -1151,41 +1151,46 @@
     silFlash *= 0.88;
 
     const lms = results.poseLandmarks;
-    if (lms) {
-      smoothShoulders(lms);
-      processGesture(lms);
-      processGesture2(lms);
-      processWaveGesture(lms);
-      processBothHandsUp(lms);
-      processCubeGrab(lms);
+
+    if (renderMode === 2) {
+      // Режим 2: только частицы + силуэт, никаких жестов
+      if (lms) updateMode2(results.segmentationMask);
+      else      updateMode2(null);
     } else {
-      gestureIsActive  = false;
-      cloudAngVel     *= 0.95;
-      redDiskActive    = false;
-      redDiskWasActive = false;
-      waveActive       = false;
-      waveHandPX       = null;
-      bothHandsUp      = false;
-      cubeGrabbed      = false;
-      cubePrevDist     = null;
+      if (lms) {
+        smoothShoulders(lms);
+        processGesture(lms);
+        processGesture2(lms);
+        processWaveGesture(lms);
+        processBothHandsUp(lms);
+        processCubeGrab(lms);
+      } else {
+        gestureIsActive  = false;
+        cloudAngVel     *= 0.95;
+        redDiskActive    = false;
+        redDiskWasActive = false;
+        waveActive       = false;
+        waveHandPX       = null;
+        bothHandsUp      = false;
+        cubeGrabbed      = false;
+        cubePrevDist     = null;
+      }
+
+      drawGestureLight();
+      updateCloudParticles();
+      drawRedDisk();
+      updateWaveParticles();
+      drawCube();
+
+      if (lms) {
+        drawForearmLines(lms);
+        if (renderMode === 0 && skeletonVisible) drawSkeleton(lms);
+        if (renderMode === 1) drawBodyMode(lms);
+        drawSilhouette(results.segmentationMask);
+      }
+
+      drawBothHandsEffect();
     }
-
-    drawGestureLight();
-    updateCloudParticles();
-    drawRedDisk();
-    updateWaveParticles();
-    drawCube();
-
-    if (lms) {
-      if (renderMode !== 2) drawForearmLines(lms);
-      if (renderMode === 0 && skeletonVisible) drawSkeleton(lms);
-      if (renderMode === 1) drawBodyMode(lms);
-      if (renderMode === 2) updateMode2(results.segmentationMask);
-      if (renderMode !== 2) drawSilhouette(results.segmentationMask);
-    }
-
-    // поверх всего — белый свет и лучи
-    drawBothHandsEffect();
   }
 
   const pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
