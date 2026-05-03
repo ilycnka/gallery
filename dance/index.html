@@ -1145,18 +1145,16 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-    // Детектируем хлопок: резкий скачок амплитуды
-    const beat = measureBeat();
-    if (beat > 0.04) silFlash = Math.min(1, silFlash + beat * 10);
-    silFlash *= 0.88;
-
     const lms = results.poseLandmarks;
 
     if (renderMode === 2) {
-      // Режим 2: только частицы + силуэт, никаких жестов
       if (lms) updateMode2(results.segmentationMask);
       else      updateMode2(null);
     } else {
+      // Детектируем хлопок: резкий скачок амплитуды
+      const beat = measureBeat();
+      if (beat > 0.04) silFlash = Math.min(1, silFlash + beat * 10);
+      silFlash *= 0.88;
       if (lms) {
         smoothShoulders(lms);
         processGesture(lms);
